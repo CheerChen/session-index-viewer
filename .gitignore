@@ -1,0 +1,5 @@
+sessions-index.json
+__pycache__/
+*.pyc
+seed-fake-sessions.py
+.DS_Store

@@ -78,7 +78,7 @@
         text-transform: uppercase;
       }
 
-      h1 {
+      .hero h1 {
         margin: 18px 0 10px;
         font-size: clamp(36px, 5vw, 62px);
         line-height: 0.96;
@@ -404,8 +404,38 @@
       .section-body.markdown ul,
       .section-body.markdown ol,
       .section-body.markdown pre,
-      .section-body.markdown blockquote {
+      .section-body.markdown blockquote,
+      .section-body.markdown table {
         margin: 0 0 0.85em;
+      }
+
+      .section-body.markdown h1,
+      .section-body.markdown h2,
+      .section-body.markdown h3,
+      .section-body.markdown h4,
+      .section-body.markdown h5,
+      .section-body.markdown h6 {
+        margin: 1em 0 0.5em;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+
+      .section-body.markdown h1 {
+        font-size: 1.7em;
+      }
+
+      .section-body.markdown h2 {
+        font-size: 1.45em;
+      }
+
+      .section-body.markdown h3 {
+        font-size: 1.25em;
+      }
+
+      .section-body.markdown h4,
+      .section-body.markdown h5,
+      .section-body.markdown h6 {
+        font-size: 1.05em;
       }
 
       .section-body.markdown code {
@@ -457,6 +487,28 @@
 
       .section-body.markdown a {
         color: #8c3f22;
+      }
+
+      .section-body.markdown table {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        border-collapse: collapse;
+        border-spacing: 0;
+        font-size: 0.96em;
+      }
+
+      .section-body.markdown thead {
+        background: rgba(80, 58, 38, 0.06);
+      }
+
+      .section-body.markdown th,
+      .section-body.markdown td {
+        padding: 10px 12px;
+        border: 1px solid rgba(86, 66, 49, 0.22);
+        text-align: left;
+        vertical-align: top;
       }
 
       .assistant-body {

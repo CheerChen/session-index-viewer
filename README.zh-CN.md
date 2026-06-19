@@ -33,9 +33,10 @@ open http://localhost:7333
   - `GET /api/sessions?limit=100` 实时扫描 session 文件，按 mtime/size
     缓存，只重新解析变化过的文件。
   - `POST /api/resume` 打开终端窗口执行
-    `cd <cwd> && claude --resume <id>`（或 `codex resume <id>`）。
-  - Host 标签从 cwd 自动推断：在本机 home 下的标 `local`；属于另一个
-    `/Users/<name>/` 或 `/home/<name>/` 的，标成 `<name>`。
+    `cd <cwd> && claude --resume <id>`（或 `codex resume <id>`）。如果
+    session 记录的是另一台机器上的 home 路径，会先映射到当前机器再打开。
+  - Host 标签从 cwd 的用户名推断：`/Users/<name>/...` 或
+    `/home/<name>/...` 都标成 `<name>`，本机也一样。
 - `sessions-index.html` — 卡片视图，含搜索、source / host 过滤器，每张
   卡片有 Copy / Open Terminal 两个 resume 入口。
 - `install.sh` — 渲染 launchd plist 并 bootstrap。日志写到
@@ -48,4 +49,4 @@ open http://localhost:7333
 如果你用 syncthing 之类的工具把 `~/.claude/projects` 和 `~/.codex/sessions`
 同步到多台机器，无需任何配置——每条 session 会按 cwd 里的 username 自动
 打标签，toolbar 上的 host 过滤器会自动出现这些选项。如果另一台机器恰好
-用相同 username，那两边会被当成同一个 host 显示为 `local`。
+用相同 username，那两边会被归到同一个 host。

@@ -36,10 +36,12 @@ Or run in the foreground: `python3 server.py`.
   - `GET /api/sessions?limit=100` scans session files live, with an
     mtime/size cache so only changed files are re-parsed.
   - `POST /api/resume` opens a Terminal window running
-    `cd <cwd> && claude --resume <id>` (or `codex resume <id>`).
-  - Host badges are inferred from each session's cwd: anything under
-    this machine's home is `local`, anything under a different
-    `/Users/<name>/` or `/home/<name>/` is labelled with `<name>`.
+    `cd <cwd> && claude --resume <id>` (or `codex resume <id>`). If the
+    recorded cwd belongs to another machine, it remaps the home-dir
+    prefix to the current machine before opening the terminal.
+  - Host badges are inferred from each session's cwd username:
+    `/Users/<name>/...` or `/home/<name>/...` is labelled as `<name>`,
+    including this machine's own home.
 - `sessions-index.html` — card view with search, source/host filters,
   per-card Copy / Open Terminal resume buttons.
 - `install.sh` — renders the launchd plist with absolute paths and
@@ -53,4 +55,4 @@ If you sync `~/.claude/projects` and `~/.codex/sessions` across
 machines (e.g. with syncthing), no extra config is needed — each
 session is auto-labelled by the username in its cwd prefix, and the
 host filter in the toolbar picks them up. Sessions from a different
-machine that happens to share your username show up as `local`.
+machine that happens to share your username will be grouped together.

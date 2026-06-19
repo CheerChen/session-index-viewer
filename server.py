@@ -24,16 +24,19 @@ BIND = "127.0.0.1"
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HTML_PATH = os.path.join(ROOT, "sessions-index.html")
+FAVICON_PATH = os.path.join(ROOT, "favicon.svg")
 
 CLAUDE_GLOB = os.path.expanduser("~/.claude/projects/*/*.jsonl")
 CODEX_GLOB = os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")
 
 # Sessions synced across machines (e.g. via syncthing) keep the cwd
 # they were recorded with. host_for() infers a label from the home-dir
-# prefix: cwds under this machine's home are "local"; cwds under a
-# different /Users/<name>/ or /home/<name>/ are labelled with <name>.
+# prefix: cwds under /Users/<name>/ or /home/<name>/ are labelled with
+# that <name>, including this machine's own home.
 LOCAL_HOME = os.path.expanduser("~")
 HOME_DIR_RE = re.compile(r"^/(?:Users|home)/([^/]+)")
+LOCAL_USER = os.path.basename(LOCAL_HOME.rstrip("/")) or "unknown"
+CURRENT_CWD = os.getcwd() if os.path.isdir(os.getcwd()) else LOCAL_HOME
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
@@ -291,13 +294,29 @@ def cached_entry(path, source):
 
 def host_for(cwd):
     if not cwd:
-        return "local"
+        return LOCAL_USER
     if cwd == LOCAL_HOME or cwd.startswith(LOCAL_HOME + "/"):
-        return "local"
+        return LOCAL_USER
     match = HOME_DIR_RE.match(cwd)
     if match:
         return match.group(1)
-    return "local"
+    return LOCAL_USER
+
+
+def resolve_resume_cwd(cwd):
+    """Map a recorded session cwd to something usable on this machine."""
+    cwd = (cwd or "").strip()
+    if cwd and os.path.isdir(cwd):
+        return cwd
+
+    match = HOME_DIR_RE.match(cwd)
+    if match:
+        suffix = cwd[match.end():].lstrip("/")
+        candidate = os.path.join(LOCAL_HOME, suffix) if suffix else LOCAL_HOME
+        if os.path.isdir(candidate):
+            return candidate
+
+    return CURRENT_CWD
 
 
 def resume_command(source, session_id, cwd):
@@ -306,7 +325,8 @@ def resume_command(source, session_id, cwd):
         if source == "claude"
         else f"codex resume {session_id}"
     )
-    return f"cd {shlex.quote(cwd)} && {base}" if cwd else base
+    resolved_cwd = resolve_resume_cwd(cwd)
+    return f"cd {shlex.quote(resolved_cwd)} && {base}" if resolved_cwd else base
 
 
 def scan_sessions(limit):
@@ -440,6 +460,19 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif parsed.path == "/favicon.svg":
+            try:
+                with open(FAVICON_PATH, "rb") as f:
+                    body = f.read()
+            except OSError:
+                self.send_error(404, "favicon.svg not found")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif parsed.path == "/api/sessions":
             query = parse_qs(parsed.query)
             try:
@@ -475,11 +508,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not SESSION_ID_RE.match(session_id):
             self._send_json({"ok": False, "error": "bad session id"}, 400)
-            return
-        if cwd and not os.path.isdir(cwd):
-            self._send_json(
-                {"ok": False, "error": f"cwd not found on this machine: {cwd}"}, 400
-            )
             return
         open_in_terminal(resume_command(source, session_id, cwd))
         self._send_json({"ok": True})

@@ -18,6 +18,7 @@
         --shadow: 0 24px 80px rgba(73, 54, 33, 0.12);
         --codex: #0d6b59;
         --claude: #b3532f;
+        --devin: #2d6cdf;
         --highlight: #f1c46a;
         --chip: #f0e6d5;
       }
@@ -419,6 +420,7 @@
         margin: 1em 0 0.5em;
         line-height: 1.2;
         letter-spacing: -0.02em;
+        font-weight: 700;
       }
 
       .section-body.markdown h1 {
@@ -433,10 +435,17 @@
         font-size: 1.25em;
       }
 
-      .section-body.markdown h4,
-      .section-body.markdown h5,
-      .section-body.markdown h6 {
+      .section-body.markdown h4 {
+        font-size: 1.12em;
+      }
+
+      .section-body.markdown h5 {
         font-size: 1.05em;
+      }
+
+      .section-body.markdown h6 {
+        font-size: 1em;
+        font-style: italic;
       }
 
       .section-body.markdown code {
@@ -630,6 +639,7 @@
               <option value="all">All Sources</option>
               <option value="codex">Codex</option>
               <option value="claude">Claude</option>
+              <option value="devin">Devin</option>
             </select>
           </label>
 
@@ -770,7 +780,9 @@
       }
 
       function sourceAccent(source) {
-        return source === "claude" ? "var(--claude)" : "var(--codex)";
+        if (source === "claude") return "var(--claude)";
+        if (source === "devin") return "var(--devin)";
+        return "var(--codex)";
       }
 
       function render() {

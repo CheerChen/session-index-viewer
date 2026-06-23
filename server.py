@@ -14,8 +14,10 @@ import json
 import os
 import re
 import shlex
+import sqlite3
 import subprocess
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -28,6 +30,9 @@ FAVICON_PATH = os.path.join(ROOT, "favicon.svg")
 
 CLAUDE_GLOB = os.path.expanduser("~/.claude/projects/*/*.jsonl")
 CODEX_GLOB = os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")
+
+DEVIN_DB = os.path.expanduser("~/.local/share/devin/cli/sessions.db")
+DEVIN_TRANSCRIPTS = os.path.expanduser("~/.local/share/devin/cli/transcripts")
 
 # Sessions synced across machines (e.g. via syncthing) keep the cwd
 # they were recorded with. host_for() infers a label from the home-dir
@@ -59,6 +64,9 @@ SKIP_USER_PREFIXES = (
 )
 
 SESSION_ID_RE = re.compile(r"^[0-9a-fA-F][0-9a-fA-F-]{6,62}[0-9a-fA-F]$")
+
+# Devin CLI session IDs are memorable word-pair slugs (e.g. "foamy-package").
+DEVIN_ID_RE = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -258,7 +266,69 @@ def parse_codex(records):
     }
 
 
+def parse_devin_file(path):
+    """Parse a Devin CLI transcript JSON (ATIF format, single object).
+
+    Unlike claude/codex jsonl, this is one JSON object with a "steps"
+    array. Always read whole — ATIF transcripts in practice stay well
+    under FULL_READ_LIMIT, and partial reads would break JSON structure.
+    Metadata (cwd, title, sort_ts) comes from the SQLite row, not the
+    transcript, so this only extracts conversation text.
+    """
+    with open(path, "rb") as f:
+        data = json.loads(f.read().decode("utf-8", "replace"))
+
+    steps = data.get("steps") or []
+
+    first_user = ""
+    for step in steps:
+        if step.get("source") == "user":
+            text = (step.get("message") or "").strip()
+            if text and usable_user_text(text):
+                first_user = text
+                break
+
+    last_user = ""
+    last_assistant = ""
+    for step in reversed(steps):
+        if not last_assistant and step.get("source") == "agent":
+            text = (step.get("message") or "").strip()
+            if text:
+                last_assistant = text
+        if not last_user and step.get("source") == "user":
+            text = (step.get("message") or "").strip()
+            if text and usable_user_text(text):
+                last_user = text
+        if last_assistant and last_user:
+            break
+
+    if not last_assistant:
+        return None
+    return {
+        "source": "devin",
+        "sort_ts": "",  # filled from SQLite row
+        "cwd": "",      # filled from SQLite row
+        "session_id": data.get("session_id", ""),
+        "title": "",    # filled from SQLite row
+        "first_user": first_user,
+        "last_user": last_user,
+        "last_assistant": last_assistant,
+    }
+
+
 def parse_file(path, source, size):
+    if source == "devin":
+        try:
+            entry = parse_devin_file(path)
+        except (ValueError, OSError):
+            return None
+        if entry is None:
+            return None
+        entry["first_user"] = clip(clean_inline(entry["first_user"]))
+        entry["last_user"] = clip(clean_inline(entry["last_user"]))
+        entry["last_assistant"] = clean_multiline(entry["last_assistant"])
+        return entry
+
     lines, windowed = read_lines(path, size)
     parser = parse_claude if source == "claude" else parse_codex
     entry = parser(decode_records(lines))
@@ -292,6 +362,37 @@ def cached_entry(path, source):
     return entry
 
 
+def devin_session_rows(limit):
+    """Query the Devin CLI SQLite database for non-hidden sessions.
+
+    Returns a list of dicts: {id, working_directory, title, last_activity_at}.
+    Opens read-only so a running devin process is never blocked. If the
+    database is absent (devin-cli not installed) or unreadable, returns [].
+    """
+    if not os.path.isfile(DEVIN_DB):
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{DEVIN_DB}?mode=ro", uri=True)
+        rows = conn.execute(
+            "SELECT id, working_directory, title, last_activity_at "
+            "FROM sessions WHERE hidden = 0 "
+            "ORDER BY last_activity_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "id": r[0],
+            "working_directory": r[1] or "",
+            "title": r[2] or "",
+            "last_activity_at": r[3],
+        }
+        for r in rows
+    ]
+
+
 def host_for(cwd):
     if not cwd:
         return LOCAL_USER
@@ -320,11 +421,12 @@ def resolve_resume_cwd(cwd):
 
 
 def resume_command(source, session_id, cwd):
-    base = (
-        f"claude --resume {session_id}"
-        if source == "claude"
-        else f"codex resume {session_id}"
-    )
+    if source == "devin":
+        base = f"devin -r {session_id}"
+    elif source == "claude":
+        base = f"claude --resume {session_id}"
+    else:
+        base = f"codex resume {session_id}"
     resolved_cwd = resolve_resume_cwd(cwd)
     return f"cd {shlex.quote(resolved_cwd)} && {base}" if resolved_cwd else base
 
@@ -355,6 +457,25 @@ def scan_sessions(limit):
             if key in seen:
                 continue  # syncthing conflict copies of the same session
             seen.add(key)
+            items.append(entry)
+
+        # Devin CLI sessions: metadata from SQLite, conversation text from
+        # transcript JSON files. Kept separate from the glob path because
+        # the candidate list comes from a DB query, not a filesystem glob.
+        for row in devin_session_rows(limit):
+            transcript = os.path.join(DEVIN_TRANSCRIPTS, f"{row['id']}.json")
+            entry = cached_entry(transcript, "devin")
+            if entry is None:
+                continue
+            key = f"devin|{entry['session_id']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            entry["cwd"] = row["working_directory"]
+            entry["title"] = ""
+            entry["sort_ts"] = datetime.fromtimestamp(
+                row["last_activity_at"], tz=timezone.utc
+            ).isoformat()
             items.append(entry)
 
     items.sort(key=lambda e: e["sort_ts"], reverse=True)
@@ -503,10 +624,11 @@ class Handler(BaseHTTPRequestHandler):
         cwd = payload.get("cwd", "")
         # Rebuild the command server-side from validated parts; never run
         # a client-supplied string.
-        if source not in ("claude", "codex"):
+        if source not in ("claude", "codex", "devin"):
             self._send_json({"ok": False, "error": "unknown source"}, 400)
             return
-        if not SESSION_ID_RE.match(session_id):
+        id_re = DEVIN_ID_RE if source == "devin" else SESSION_ID_RE
+        if not id_re.match(session_id):
             self._send_json({"ok": False, "error": "bad session id"}, 400)
             return
         open_in_terminal(resume_command(source, session_id, cwd))

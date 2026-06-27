@@ -32,7 +32,6 @@ CLAUDE_GLOB = os.path.expanduser("~/.claude/projects/*/*.jsonl")
 CODEX_GLOB = os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")
 
 DEVIN_DB = os.path.expanduser("~/.local/share/devin/cli/sessions.db")
-DEVIN_TRANSCRIPTS = os.path.expanduser("~/.local/share/devin/cli/transcripts")
 
 # Sessions synced across machines (e.g. via syncthing) keep the cwd
 # they were recorded with. host_for() infers a label from the home-dir
@@ -266,69 +265,7 @@ def parse_codex(records):
     }
 
 
-def parse_devin_file(path):
-    """Parse a Devin CLI transcript JSON (ATIF format, single object).
-
-    Unlike claude/codex jsonl, this is one JSON object with a "steps"
-    array. Always read whole — ATIF transcripts in practice stay well
-    under FULL_READ_LIMIT, and partial reads would break JSON structure.
-    Metadata (cwd, title, sort_ts) comes from the SQLite row, not the
-    transcript, so this only extracts conversation text.
-    """
-    with open(path, "rb") as f:
-        data = json.loads(f.read().decode("utf-8", "replace"))
-
-    steps = data.get("steps") or []
-
-    first_user = ""
-    for step in steps:
-        if step.get("source") == "user":
-            text = (step.get("message") or "").strip()
-            if text and usable_user_text(text):
-                first_user = text
-                break
-
-    last_user = ""
-    last_assistant = ""
-    for step in reversed(steps):
-        if not last_assistant and step.get("source") == "agent":
-            text = (step.get("message") or "").strip()
-            if text:
-                last_assistant = text
-        if not last_user and step.get("source") == "user":
-            text = (step.get("message") or "").strip()
-            if text and usable_user_text(text):
-                last_user = text
-        if last_assistant and last_user:
-            break
-
-    if not last_assistant:
-        return None
-    return {
-        "source": "devin",
-        "sort_ts": "",  # filled from SQLite row
-        "cwd": "",      # filled from SQLite row
-        "session_id": data.get("session_id", ""),
-        "title": "",    # filled from SQLite row
-        "first_user": first_user,
-        "last_user": last_user,
-        "last_assistant": last_assistant,
-    }
-
-
 def parse_file(path, source, size):
-    if source == "devin":
-        try:
-            entry = parse_devin_file(path)
-        except (ValueError, OSError):
-            return None
-        if entry is None:
-            return None
-        entry["first_user"] = clip(clean_inline(entry["first_user"]))
-        entry["last_user"] = clip(clean_inline(entry["last_user"]))
-        entry["last_assistant"] = clean_multiline(entry["last_assistant"])
-        return entry
-
     lines, windowed = read_lines(path, size)
     parser = parse_claude if source == "claude" else parse_codex
     entry = parser(decode_records(lines))
@@ -362,35 +299,104 @@ def cached_entry(path, source):
     return entry
 
 
-def devin_session_rows(limit):
-    """Query the Devin CLI SQLite database for non-hidden sessions.
+def devin_sessions(limit):
+    """Query the Devin CLI SQLite database for non-hidden sessions and
+    extract conversation snippets directly from the message_nodes table.
 
-    Returns a list of dicts: {id, working_directory, title, last_activity_at}.
+    Devin CLI stores session metadata in `sessions` and the full
+    conversation in `message_nodes` (one JSON row per chat message).
+    ATIF transcript files under transcripts/ are only written when the
+    user opts into --export, so relying on them would miss most
+    sessions. Reading from the DB instead captures every session.
+
+    Returns a list of entry dicts (same shape as parse_claude/parse_codex).
     Opens read-only so a running devin process is never blocked. If the
     database is absent (devin-cli not installed) or unreadable, returns [].
     """
     if not os.path.isfile(DEVIN_DB):
         return []
+    entries = []
     try:
         conn = sqlite3.connect(f"file:{DEVIN_DB}?mode=ro", uri=True)
-        rows = conn.execute(
+        sessions = conn.execute(
             "SELECT id, working_directory, title, last_activity_at "
             "FROM sessions WHERE hidden = 0 "
             "ORDER BY last_activity_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
+
+        for sid, cwd, title, last_activity_at in sessions:
+            cache_key = f"devin:{sid}"
+            hit = _cache.get(cache_key)
+            if hit and hit[0] == last_activity_at:
+                entries.append(hit[1])
+                continue
+
+            first_user = ""
+            row = conn.execute(
+                "SELECT json_extract(chat_message, '$.content') "
+                "FROM message_nodes "
+                "WHERE session_id = ? "
+                "  AND json_extract(chat_message, '$.role') = 'user' "
+                "  AND json_extract(chat_message, '$.metadata.is_user_input') = 1 "
+                "ORDER BY node_id LIMIT 1",
+                (sid,),
+            ).fetchone()
+            if row and row[0]:
+                text = row[0].strip()
+                if text and usable_user_text(text):
+                    first_user = text
+
+            last_user = ""
+            row = conn.execute(
+                "SELECT json_extract(chat_message, '$.content') "
+                "FROM message_nodes "
+                "WHERE session_id = ? "
+                "  AND json_extract(chat_message, '$.role') = 'user' "
+                "  AND json_extract(chat_message, '$.metadata.is_user_input') = 1 "
+                "ORDER BY node_id DESC LIMIT 1",
+                (sid,),
+            ).fetchone()
+            if row and row[0]:
+                text = row[0].strip()
+                if text and usable_user_text(text):
+                    last_user = text
+
+            last_assistant = ""
+            row = conn.execute(
+                "SELECT json_extract(chat_message, '$.content') "
+                "FROM message_nodes "
+                "WHERE session_id = ? "
+                "  AND json_extract(chat_message, '$.role') = 'assistant' "
+                "  AND json_extract(chat_message, '$.content') != '' "
+                "ORDER BY node_id DESC LIMIT 1",
+                (sid,),
+            ).fetchone()
+            if row and row[0]:
+                last_assistant = row[0].strip()
+
+            if not last_assistant:
+                continue  # skip sessions with no agent output yet
+
+            entry = {
+                "source": "devin",
+                "sort_ts": datetime.fromtimestamp(
+                    last_activity_at, tz=timezone.utc
+                ).isoformat(),
+                "cwd": cwd or "",
+                "session_id": sid,
+                "title": clip(clean_inline(title or ""), 200),
+                "first_user": clip(clean_inline(first_user)),
+                "last_user": clip(clean_inline(last_user)),
+                "last_assistant": clean_multiline(last_assistant),
+            }
+            _cache[cache_key] = (last_activity_at, entry)
+            entries.append(entry)
+
         conn.close()
     except sqlite3.Error:
         return []
-    return [
-        {
-            "id": r[0],
-            "working_directory": r[1] or "",
-            "title": r[2] or "",
-            "last_activity_at": r[3],
-        }
-        for r in rows
-    ]
+    return entries
 
 
 def host_for(cwd):
@@ -459,23 +465,15 @@ def scan_sessions(limit):
             seen.add(key)
             items.append(entry)
 
-        # Devin CLI sessions: metadata from SQLite, conversation text from
-        # transcript JSON files. Kept separate from the glob path because
-        # the candidate list comes from a DB query, not a filesystem glob.
-        for row in devin_session_rows(limit):
-            transcript = os.path.join(DEVIN_TRANSCRIPTS, f"{row['id']}.json")
-            entry = cached_entry(transcript, "devin")
-            if entry is None:
-                continue
+        # Devin CLI sessions: metadata and conversation text both come
+        # straight from the SQLite database (message_nodes table). Kept
+        # separate from the glob path because the candidate list comes
+        # from a DB query, not a filesystem glob.
+        for entry in devin_sessions(limit):
             key = f"devin|{entry['session_id']}"
             if key in seen:
                 continue
             seen.add(key)
-            entry["cwd"] = row["working_directory"]
-            entry["title"] = ""
-            entry["sort_ts"] = datetime.fromtimestamp(
-                row["last_activity_at"], tz=timezone.utc
-            ).isoformat()
             items.append(entry)
 
     items.sort(key=lambda e: e["sort_ts"], reverse=True)

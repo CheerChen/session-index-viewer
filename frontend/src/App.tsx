@@ -107,6 +107,7 @@ export default function App() {
     overscan: 6,
     scrollMargin,
     measureElement: (el) => el.getBoundingClientRect().height,
+    getItemKey: (index) => sessionKey(filtered[index]),
   });
 
   const scrollActiveIntoView = useCallback(

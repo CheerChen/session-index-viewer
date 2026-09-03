@@ -3,7 +3,9 @@
 import json
 import math
 import os
+import shutil
 import sqlite3
+import subprocess
 from datetime import datetime, timezone
 
 from .. import cache
@@ -279,3 +281,60 @@ def messages(session_id, page=1, page_size=50):
         "pages": math.ceil(total / page_size) if total else 1,
         "messages": all_messages[offset : offset + page_size],
     }
+
+
+def _executable():
+    candidates = (
+        shutil.which("devin"),
+        "/opt/homebrew/bin/devin",
+        "/usr/local/bin/devin",
+    )
+    return next(
+        (
+            path
+            for path in candidates
+            if path and os.path.isfile(path) and os.access(path, os.X_OK)
+        ),
+        None,
+    )
+
+
+def delete_session(session_id):
+    if not os.path.isfile(DEVIN_DB):
+        return {"ok": False, "error": "Session not found."}, 404
+    try:
+        conn = sqlite3.connect(f"file:{DEVIN_DB}?mode=ro", uri=True)
+        try:
+            exists = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return {"ok": False, "error": "Unable to read Devin sessions."}, 500
+    if exists is None:
+        return {"ok": False, "error": "Session not found."}, 404
+
+    executable = _executable()
+    if executable is None:
+        return {"ok": False, "error": "Devin CLI was not found."}, 503
+    try:
+        result = subprocess.run(
+            [executable, "rm", "--force", session_id],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Devin session deletion timed out."}, 504
+    except OSError:
+        return {"ok": False, "error": "Unable to run Devin CLI."}, 503
+    if result.returncode != 0:
+        output = f"{result.stdout}\n{result.stderr}".lower()
+        if any(word in output for word in ("open", "running", "locked", "in use")):
+            return {"ok": False, "error": "Session is currently open in Devin."}, 409
+        return {"ok": False, "error": "Devin could not delete this session."}, 500
+
+    cache.delete(f"devin:{session_id}")
+    return {"ok": True}, 200

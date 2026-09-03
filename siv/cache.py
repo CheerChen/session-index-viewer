@@ -15,5 +15,9 @@ def set(key, value):
     _cache[key] = value
 
 
+def delete(key):
+    _cache.pop(key, None)
+
+
 def lock():
     return _cache_lock

@@ -12,6 +12,7 @@ import { SkeletonCard } from "./components/SkeletonCard";
 import { CommandPalette } from "./components/CommandPalette";
 import { UsageModal } from "./components/UsageModal";
 import { SessionConversation } from "./components/SessionConversation";
+import { DeleteSessionModal } from "./components/DeleteSessionModal";
 
 interface FilterState {
   query: string;
@@ -35,6 +36,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Global conversation modal — single instance, same pattern as usage.
   const [conversationSession, setConversationSession] = useState<Session | null>(null);
+  const [deleteSession, setDeleteSession] = useState<Session | null>(null);
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
   const [showTop, setShowTop] = useState(false);
@@ -140,6 +142,19 @@ export default function App() {
   const handleConversationOpen = useCallback((session: Session) => {
     setConversationSession(session);
   }, []);
+  const handleDeleteRequest = useCallback((session: Session) => {
+    if (session.source !== "devin") return;
+    setConversationSession(null);
+    setDeleteSession(session);
+  }, []);
+  const handleDeleteCancel = useCallback(() => {
+    if (deleteSession) setConversationSession(deleteSession);
+    setDeleteSession(null);
+  }, [deleteSession]);
+  const handleDeleted = useCallback(() => {
+    setDeleteSession(null);
+    void reload();
+  }, [reload]);
 
   // Stable callback for usage chip clicks in SessionCard.
   const handleUsageOpen = useCallback((session: Session) => {
@@ -377,6 +392,15 @@ export default function App() {
         <SessionConversation
           session={conversationSession}
           onClose={() => setConversationSession(null)}
+          onDeleteRequest={handleDeleteRequest}
+        />
+      )}
+
+      {deleteSession && (
+        <DeleteSessionModal
+          session={deleteSession}
+          onCancel={handleDeleteCancel}
+          onDeleted={handleDeleted}
         />
       )}
 

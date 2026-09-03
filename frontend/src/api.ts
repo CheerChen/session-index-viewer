@@ -24,6 +24,23 @@ export async function fetchSessionMessages(
   return res.json();
 }
 
+export async function deleteDevinSession(
+  sessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/session/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: "devin",
+      session_id: sessionId,
+      confirm_session_id: sessionId,
+    }),
+  });
+  const result = (await res.json()) as { ok: boolean; error?: string };
+  if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+  return result;
+}
+
 export async function postResume(
   session: Pick<Session, "source" | "session_id" | "cwd">,
 ): Promise<{ ok: boolean; error?: string }> {

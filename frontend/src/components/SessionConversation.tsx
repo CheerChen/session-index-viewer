@@ -53,9 +53,14 @@ const MessageBody = memo(function MessageBody({
 interface SessionConversationProps {
   session: Session;
   onClose: () => void;
+  onDeleteRequest: (session: Session) => void;
 }
 
-function Conversation({ session, onClose }: SessionConversationProps) {
+function Conversation({
+  session,
+  onClose,
+  onDeleteRequest,
+}: SessionConversationProps) {
   const { data, loading, error, page, setPage } = useSessionMessages(session);
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -125,14 +130,25 @@ function Conversation({ session, onClose }: SessionConversationProps) {
               <span className="conv-modal-session">{session.session_id}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className="usage-modal-close"
-            onClick={onClose}
-            aria-label="Close conversation"
-          >
-            ✕
-          </button>
+          <div className="conv-modal-head-actions">
+            {session.source === "devin" && (
+              <button
+                type="button"
+                className="delete-session-trigger"
+                onClick={() => onDeleteRequest(session)}
+              >
+                Delete session
+              </button>
+            )}
+            <button
+              type="button"
+              className="usage-modal-close"
+              onClick={onClose}
+              aria-label="Close conversation"
+            >
+              ✕
+            </button>
+          </div>
         </header>
 
         {error && !data ? (

@@ -1271,6 +1271,32 @@
         margin-bottom: 16px;
       }
 
+      .conv-modal-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .delete-session-trigger {
+        border: 0;
+        border-radius: 8px;
+        padding: 6px 8px;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        transition:
+          background 140ms ease,
+          color 140ms ease;
+      }
+
+      .delete-session-trigger:hover {
+        background: color-mix(in oklch, var(--usage-pressure-high) 10%, transparent);
+        color: var(--usage-pressure-high);
+      }
+
       .conv-modal-head-text {
         min-width: 0;
         flex: 1 1 auto;
@@ -1463,6 +1489,143 @@
         font-size: 13px;
         color: var(--muted);
         text-align: center;
+      }
+
+      .delete-confirm-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        display: grid;
+        place-items: center;
+        padding: 24px 16px;
+        background: var(--backdrop);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        transition: opacity 180ms var(--ease-out);
+      }
+
+      .delete-confirm-backdrop.is-entered {
+        opacity: 1;
+      }
+
+      .delete-confirm-modal {
+        width: min(480px, 100%);
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel-strong);
+        box-shadow: var(--shadow-modal);
+        color: var(--text);
+        opacity: 0;
+        transform: scale(0.97);
+        transition:
+          opacity 200ms var(--ease-out),
+          transform 200ms var(--ease-out);
+      }
+
+      .delete-confirm-modal.is-entered {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .delete-confirm-eyebrow {
+        margin-bottom: 6px;
+        color: var(--usage-pressure-high);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .delete-confirm-modal h2 {
+        margin: 0 0 16px;
+        font-size: 22px;
+        line-height: 1.2;
+      }
+
+      .delete-confirm-session {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--surface-tint-strong);
+      }
+
+      .delete-confirm-session strong,
+      .delete-confirm-session code {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .delete-confirm-session code {
+        color: var(--text-meta);
+        font-size: 12px;
+      }
+
+      .delete-confirm-modal p {
+        margin: 16px 0;
+        color: var(--text-meta);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .delete-confirm-error {
+        margin-bottom: 16px;
+        color: var(--usage-pressure-high);
+        font-size: 13px;
+      }
+
+      .delete-confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .delete-confirm-cancel,
+      .delete-confirm-submit {
+        border: 0;
+        border-radius: 999px;
+        padding: 9px 14px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .delete-confirm-cancel {
+        background: var(--button-bg);
+        color: var(--button-text);
+      }
+
+      .delete-confirm-submit {
+        background: var(--usage-pressure-high);
+        color: var(--pre-text);
+      }
+
+      .delete-confirm-cancel:disabled,
+      .delete-confirm-submit:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      .delete-confirm-cancel:focus-visible,
+      .delete-confirm-submit:focus-visible,
+      .delete-session-trigger:focus-visible {
+        outline: 2px solid var(--usage-pressure-high);
+        outline-offset: 2px;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .delete-confirm-backdrop,
+        .delete-confirm-modal {
+          transition: none !important;
+        }
+
+        .delete-confirm-modal {
+          transform: none;
+        }
       }
 
       .toggle-button {

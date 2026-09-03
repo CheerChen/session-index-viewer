@@ -116,7 +116,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._serve_file(html, "text/html; charset=utf-8")
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/resume":
+        path = urlparse(self.path).path
+        if path not in ("/api/resume", "/api/session/delete"):
             self.send_error(404)
             return
         if not self._origin_allowed():
@@ -128,9 +129,29 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, TypeError):
             self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
             return
+        if not isinstance(payload, dict):
+            self._send_json({"ok": False, "error": "invalid JSON body"}, 400)
+            return
 
         source = payload.get("source")
         session_id = payload.get("session_id", "")
+        if path == "/api/session/delete":
+            confirmation = payload.get("confirm_session_id", "")
+            if source != "devin":
+                self._send_json({"ok": False, "error": "unsupported source"}, 400)
+                return
+            if not isinstance(session_id, str) or not DEVIN_ID_RE.fullmatch(
+                session_id
+            ):
+                self._send_json({"ok": False, "error": "bad session id"}, 400)
+                return
+            if confirmation != session_id:
+                self._send_json({"ok": False, "error": "confirmation mismatch"}, 400)
+                return
+            result, status = devin.delete_session(session_id)
+            self._send_json(result, status)
+            return
+
         cwd = payload.get("cwd", "")
         # Rebuild the command server-side from validated parts; never run
         # a client-supplied string.

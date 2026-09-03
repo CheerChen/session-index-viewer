@@ -20,6 +20,7 @@ interface SessionCardProps {
   queryText: string;
   onPin: (index: number) => void;
   onActivate: (index: number) => void;
+  onConversationOpen: (session: Session) => void;
   onUsageOpen: (session: Session) => void;
 }
 
@@ -31,6 +32,7 @@ function SessionCardImpl({
   queryText,
   onPin,
   onActivate,
+  onConversationOpen,
   onUsageOpen,
 }: SessionCardProps) {
   const accent = sourceAccent(session.source);
@@ -228,6 +230,20 @@ function SessionCardImpl({
             lastAssistant={session.last_assistant}
           />
         </div>
+        {session.source === "devin" && (
+          <div className="section-actions">
+            <button
+              className="toggle-button"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConversationOpen(session);
+              }}
+            >
+              Show conversation
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1209,6 +1209,262 @@
         display: none;
       }
 
+      /* Full-conversation modal (devin). Rendered as a dialog so the
+         virtualized card list never hosts the conversation DOM; the
+         conversation itself sits in a scrollable panel. */
+      .conv-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        padding: 24px 16px;
+        background: var(--backdrop);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        transition: opacity 200ms var(--ease-out);
+      }
+
+      .conv-modal-backdrop.is-entered {
+        opacity: 1;
+      }
+
+      .conv-modal {
+        width: min(920px, 100%);
+        max-height: min(88vh, 900px);
+        overflow: auto;
+        padding: 22px 24px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel-strong);
+        box-shadow: var(--shadow-modal);
+        color: var(--text);
+        opacity: 0;
+        transform: scale(0.96);
+        transition:
+          opacity 220ms var(--ease-out),
+          transform 220ms var(--ease-out);
+        outline: none;
+      }
+
+      .conv-modal.is-entered {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .conv-modal-backdrop,
+        .conv-modal {
+          transition: none !important;
+        }
+
+        .conv-modal {
+          transform: none;
+        }
+      }
+
+      .conv-modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .conv-modal-head-text {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .conv-modal-eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+
+      .conv-modal-title {
+        margin: 0 0 10px;
+        font-size: 18px;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+      }
+
+      .conv-modal-title-text {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .conv-modal-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .conv-modal-session {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        padding: 6px 11px;
+        border-radius: 999px;
+        background: var(--chip);
+        color: var(--text-muted-2);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .conv-modal-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .conv-count {
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .conv-pager {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .conv-pager .toggle-button {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .conv-pager .toggle-button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .conv-page {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--text-meta);
+      }
+
+      .conv-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .conv-msg {
+        min-width: 0;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: var(--surface-tint-2);
+      }
+
+      .conv-msg--user {
+        background: var(--surface-section);
+      }
+
+      .conv-msg--assistant {
+        background: var(--surface-tint);
+      }
+
+      .conv-msg-meta {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .conv-role {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .conv-msg--user .conv-role {
+        color: var(--claude);
+      }
+
+      .conv-msg--assistant .conv-role {
+        color: var(--devin);
+      }
+
+      .conv-msg--tool .conv-role {
+        color: var(--grok);
+      }
+
+      .conv-time {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .conv-user-text {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .conv-thinking {
+        margin: 0 0 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: var(--surface-tint-strong);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text-meta);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .conv-details {
+        margin-bottom: 8px;
+      }
+
+      .conv-details summary {
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        user-select: none;
+      }
+
+      .conv-tool-omitted {
+        margin: -4px 0;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .conv-status {
+        padding: 12px;
+        font-size: 13px;
+        color: var(--muted);
+        text-align: center;
+      }
+
       .toggle-button {
         border: 0;
         border-radius: 999px;

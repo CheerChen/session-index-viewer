@@ -38,3 +38,24 @@ export type SourceFilter =
   | "pi"
   | "copilot"
   | "opencode";
+
+// Full-conversation message shape returned by GET /api/session. Only
+// devin exposes messages today; other sources can add a page later.
+export interface SessionMessage {
+  node_id: number;
+  role: string;
+  content: string;
+  created_at?: string;
+  thinking?: string;
+  tool_call_count?: number;
+}
+
+export interface SessionMessages {
+  source: string;
+  session_id: string;
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  messages: SessionMessage[];
+}

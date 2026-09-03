@@ -11,6 +11,7 @@ import { SessionCard } from "./components/SessionCard";
 import { SkeletonCard } from "./components/SkeletonCard";
 import { CommandPalette } from "./components/CommandPalette";
 import { UsageModal } from "./components/UsageModal";
+import { SessionConversation } from "./components/SessionConversation";
 
 interface FilterState {
   query: string;
@@ -32,6 +33,8 @@ export default function App() {
   const [filter, setFilter] = useState<FilterState>(INITIAL_FILTER);
   const [activeIdx, setActiveIdx] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Global conversation modal — single instance, same pattern as usage.
+  const [conversationSession, setConversationSession] = useState<Session | null>(null);
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
   const [showTop, setShowTop] = useState(false);
@@ -132,6 +135,12 @@ export default function App() {
     setActiveIdx(idx);
   }, []);
 
+  // Stable callback for the conversation chip in SessionCard — mirrors
+  // handleUsageOpen so the modal opens from any card position.
+  const handleConversationOpen = useCallback((session: Session) => {
+    setConversationSession(session);
+  }, []);
+
   // Stable callback for usage chip clicks in SessionCard.
   const handleUsageOpen = useCallback((session: Session) => {
     setUsageSession(session);
@@ -183,6 +192,10 @@ export default function App() {
         e.preventDefault();
         const item = filtered[safeActiveIdx];
         if (item) togglePin(item);
+      } else if (e.key === "e") {
+        e.preventDefault();
+        const item = filtered[safeActiveIdx];
+        if (item?.source === "devin") setConversationSession(item);
       } else if (e.key === "u") {
         e.preventDefault();
         const item = filtered[safeActiveIdx];
@@ -191,7 +204,13 @@ export default function App() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [filtered, safeActiveIdx, paletteOpen, togglePin, scrollActiveIntoView]);
+  }, [
+    filtered,
+    safeActiveIdx,
+    paletteOpen,
+    togglePin,
+    scrollActiveIntoView,
+  ]);
 
   const jumpToSession = useCallback(
     (item: Session) => {
@@ -328,6 +347,7 @@ export default function App() {
                       queryText={queryText}
                       onPin={handlePin}
                       onActivate={handleActivate}
+                      onConversationOpen={handleConversationOpen}
                       onUsageOpen={handleUsageOpen}
                     />
                   </div>
@@ -350,6 +370,13 @@ export default function App() {
         <UsageModal
           session={usageSession}
           onClose={() => setUsageSession(null)}
+        />
+      )}
+
+      {conversationSession && (
+        <SessionConversation
+          session={conversationSession}
+          onClose={() => setConversationSession(null)}
         />
       )}
 

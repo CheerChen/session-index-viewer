@@ -1,5 +1,7 @@
 """Devin CLI sessions from the local SQLite database."""
 
+import json
+import math
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -170,3 +172,110 @@ def collect(limit):
     except sqlite3.Error:
         return []
     return entries
+
+
+def _message_out(node_id, m):
+    """Project one message_nodes row into the API response shape."""
+    out = {
+        "node_id": node_id,
+        "role": m.get("role", ""),
+        "content": m.get("content", "") or "",
+    }
+    metadata = m.get("metadata") or {}
+    if metadata.get("created_at"):
+        out["created_at"] = metadata["created_at"]
+    thinking = m.get("thinking")
+    if isinstance(thinking, dict):
+        text = thinking.get("thinking")
+        if text:
+            out["thinking"] = text
+    return out
+
+
+def _has_reply(message):
+    content = message.get("content")
+    return isinstance(content, str) and bool(content.strip())
+
+
+def _conversation_messages(rows):
+    messages = []
+    assistant = None
+    for node_id, raw in rows:
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        message = _message_out(node_id, parsed)
+        if message["role"] == "user":
+            if assistant and _has_reply(assistant):
+                messages.append(assistant)
+            assistant = None
+            messages.append(message)
+            continue
+        calls = parsed.get("tool_calls")
+        tool_call_count = len(calls) if isinstance(calls, list) else 0
+        if assistant is None:
+            assistant = message
+            assistant["tool_call_count"] = tool_call_count
+            continue
+        assistant["node_id"] = message["node_id"]
+        for key in ("created_at", "content", "thinking"):
+            if message.get(key):
+                assistant[key] = message[key]
+        assistant["tool_call_count"] += tool_call_count
+    if assistant and _has_reply(assistant):
+        messages.append(assistant)
+    return messages
+
+
+def messages(session_id, page=1, page_size=50):
+    """Return user turns and final assistant replies from the active chain.
+
+    System context and tool results are omitted. Assistant events within one
+    user turn are combined, with their tool-call count attached to the final
+    reply. The caller must validate session_id against DEVIN_ID_RE first.
+    Returns None when the DB or session is missing.
+    """
+    if not os.path.isfile(DEVIN_DB):
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{DEVIN_DB}?mode=ro", uri=True)
+        try:
+            session = conn.execute(
+                "SELECT main_chain_id FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if session is None:
+                return None
+            rows = conn.execute(
+                "WITH RECURSIVE chain(node_id, parent_node_id, chat_message, depth) AS ("
+                "  SELECT node_id, parent_node_id, chat_message, 0 FROM message_nodes "
+                "  WHERE session_id = ? AND node_id = ? "
+                "  UNION ALL "
+                "  SELECT parent.node_id, parent.parent_node_id, "
+                "    parent.chat_message, child.depth + 1 "
+                "  FROM message_nodes AS parent JOIN chain AS child "
+                "    ON parent.session_id = ? "
+                "   AND parent.node_id = child.parent_node_id"
+                ") "
+                "SELECT node_id, chat_message FROM chain "
+                "WHERE json_extract(chat_message, '$.role') IN ('user','assistant') "
+                "ORDER BY depth DESC",
+                (session_id, session[0], session_id),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+    all_messages = _conversation_messages(rows)
+    total = len(all_messages)
+    offset = (page - 1) * page_size
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": math.ceil(total / page_size) if total else 1,
+        "messages": all_messages[offset : offset + page_size],
+    }

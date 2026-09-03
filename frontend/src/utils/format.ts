@@ -74,6 +74,13 @@ export function escapeHtml(text: unknown): string {
     .replaceAll("'", "&#39;");
 }
 
+// Truncate long machine-generated text (tool results, system context)
+// that would otherwise blow up the conversation DOM when expanded.
+export function clipText(text: string, max = 600): string {
+  if (!text || text.length <= max) return text;
+  return `${text.slice(0, max)}… (+${text.length - max} chars)`;
+}
+
 // Wrap occurrences of `query` in <mark> for search highlighting.
 // The input text is escaped first so the mark tags are the only HTML.
 export function highlight(text: string, query: string): string {

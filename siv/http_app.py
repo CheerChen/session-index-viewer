@@ -22,6 +22,7 @@ from .config import (
 )
 from .resume import open_in_terminal, resume_command
 from .scan import scan_sessions
+from .sources import devin
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,6 +77,30 @@ class Handler(BaseHTTPRequestHandler):
                     limit = DEFAULT_LIMIT
                 limit = max(1, min(limit, MAX_LIMIT))
                 self._send_json(scan_sessions(limit))
+            elif path == "/api/session":
+                query = parse_qs(parsed.query)
+                source = query.get("source", [""])[0]
+                session_id = query.get("session_id", [""])[0]
+                try:
+                    page = int(query.get("page", ["1"])[0])
+                except ValueError:
+                    page = 1
+                try:
+                    page_size = int(query.get("page_size", ["50"])[0])
+                except ValueError:
+                    page_size = 50
+                page = max(1, page)
+                page_size = max(1, min(page_size, 200))
+                if source == "devin" and DEVIN_ID_RE.match(session_id):
+                    payload = devin.messages(session_id, page, page_size)
+                    if payload is None:
+                        self.send_error(404)
+                    else:
+                        self._send_json(
+                            {"source": source, "session_id": session_id, **payload}
+                        )
+                else:
+                    self.send_error(404)
             else:
                 self.send_error(404)
         else:

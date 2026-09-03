@@ -14,6 +14,9 @@ Terminal 新窗口里 resume。
 各 CLI 的 resume 列表多半只有 session ID 和时间戳，看不出当时在聊什么。本工具
 展示每条 session 的开头提问和最后一次回复，方便挑中目标并接上。
 
+hero 右上角有**深色模式**切换按钮，选择会保存在本地，首次访问时跟随系统
+`prefers-color-scheme`。
+
 > **仅支持 macOS。** 用 launchd 自启，通过 AppleScript / `open -na` 调用
 > Ghostty、iTerm 或 Terminal.app。按该顺序自动检测已安装的终端。
 
@@ -78,7 +81,8 @@ size 信号（chip 上标 **size only**）。
   - Host 标签取自 cwd 中的用户名（`/Users/<name>/...` 或 `/home/<name>/...`）。
   - 解析逻辑在 `siv/sources/`（`claude` / `codex` / `devin` / `grok` / `pi` /
     `copilot` / `opencode`）。
-- `frontend/` — React 卡片 UI（搜索、source/host 过滤、置顶、usage modal）。
+- `frontend/` — React 卡片 UI（搜索、source/host 过滤、置顶、usage modal、
+  深色 / 浅色主题切换）。
 - `sessions-index.html` — 旧版单文件 UI（无 dist 时回退）。
 - `install.sh` — 写入 launchd plist，并可构建前端。日志：
   `~/Library/Logs/session-index-viewer.log`。

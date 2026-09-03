@@ -17,6 +17,10 @@ ids and timestamps — not what was said. This viewer shows the opening prompt
 and last reply of every session so you can spot the one you want and pick up
 where you left off.
 
+A **dark mode** toggle sits in the hero's top-right corner. The choice
+persists across reloads and defaults to the OS `prefers-color-scheme`
+on first visit.
+
 > **macOS only.** Uses launchd for autostart and AppleScript /
 > `open -na` to launch Ghostty, iTerm, or Terminal.app. Auto-detects
 > whichever is installed, in that order.
@@ -85,7 +89,8 @@ Grok often only has that size signal (labelled **size only** on the chip).
     (`/Users/<name>/...` or `/home/<name>/...`).
   - Parsers: `siv/sources/` (`claude`, `codex`, `devin`, `grok`, `pi`,
     `copilot`, `opencode`).
-- `frontend/` — React card UI (search, source/host filters, pin, usage modal).
+- `frontend/` — React card UI (search, source/host filters, pin, usage modal,
+  light/dark theme toggle).
 - `sessions-index.html` — legacy single-file viewer (fallback if dist is missing).
 - `install.sh` — launchd plist + optional frontend build. Logs:
   `~/Library/Logs/session-index-viewer.log`.

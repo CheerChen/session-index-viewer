@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-09-03
+
+### Theme
+- **Dark mode.** A theme toggle (sun / moon icon) in the hero's
+  top-right corner switches between the original warm light palette
+  and a new dark palette. The choice persists in `localStorage` and
+  falls back to the OS `prefers-color-scheme` on first visit. An
+  inline script in `index.html` applies the stored theme before first
+  paint to avoid a flash. All surface, text, border, and shadow
+  colours were refactored into semantic CSS variables under `:root`
+  and flipped as a set via `[data-theme="dark"]`; agent identity
+  colours (Claude / Codex / Devin / …) stay the same in both themes.
+
+### Fixes
+- **Virtualizer height cache keyed by index, not session.**
+  `useWindowVirtualizer` was using the default `getItemKey` (index),
+  so the per-item height cache was keyed by position, not by session
+  identity. When `filtered` reordered (pin/unpin, session updates, new
+  arrivals), the cached heights shifted to the wrong items and
+  produced visible gaps and overlaps between cards. The cache is now
+  keyed by `sessionKey(filtered[index])` so heights follow their
+  content across reorders.
+
 ## 2026-08-17
 
 ### Sources

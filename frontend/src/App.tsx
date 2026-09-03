@@ -3,6 +3,7 @@ import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import type { Session, SourceFilter } from "./types";
 import { useSessions } from "./hooks/useSessions";
 import { usePinned } from "./hooks/usePinned";
+import { useTheme } from "./hooks/useTheme";
 import { sessionKey } from "./utils/format";
 import { postResume } from "./api";
 import { Toolbar } from "./components/Toolbar";
@@ -26,6 +27,7 @@ const INITIAL_FILTER: FilterState = {
 export default function App() {
   const { sessions, error, loading, reload } = useSessions();
   const { pinnedIds, toggle: togglePin, has: isPinned } = usePinned();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const [filter, setFilter] = useState<FilterState>(INITIAL_FILTER);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -216,6 +218,46 @@ export default function App() {
     <main className="shell">
       <section className="hero">
         <div className="eyebrow">Session Index Viewer</div>
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={toggleTheme}
+          aria-label={
+            theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
+          }
+          title={theme === "dark" ? "Light theme" : "Dark theme"}
+        >
+          {theme === "dark" ? (
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+          ) : (
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
         <h1>
           Pick up
           <br />

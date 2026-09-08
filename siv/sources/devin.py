@@ -286,6 +286,7 @@ def messages(session_id, page=1, page_size=50):
 def _executable():
     candidates = (
         shutil.which("devin"),
+        os.path.expanduser("~/.local/bin/devin"),
         "/opt/homebrew/bin/devin",
         "/usr/local/bin/devin",
     )

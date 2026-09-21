@@ -17,6 +17,7 @@ import sqlite3
 from .. import cache
 from ..config import COPILOT_DB
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
+from ..trash import delete_db_session
 
 
 def collect(limit):
@@ -120,3 +121,13 @@ def collect(limit):
     except sqlite3.Error:
         return []
     return entries
+
+
+def delete_session(session_id):
+    """Archive the session's rows to Trash, then delete them from the DB."""
+    result, status = delete_db_session(
+        COPILOT_DB, "sessions", session_id, "copilot"
+    )
+    if result.get("ok"):
+        cache.delete(f"copilot:{session_id}")
+    return result, status

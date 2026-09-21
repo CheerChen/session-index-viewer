@@ -8,6 +8,7 @@ from datetime import datetime
 from .. import cache
 from ..config import SESSION_ID_RE
 from ..text import blocks_text, clean_inline, clean_multiline, clip, usable_user_text
+from ..trash import move_to_trash
 
 
 def sessions_root():
@@ -316,3 +317,36 @@ def collect(limit):
         if len(entries) >= limit:
             break
     return entries
+
+
+def delete_session(session_id):
+    """Trash the whole session directory sessions/<cwd>/<id>/."""
+    root = sessions_root()
+    try:
+        groups = os.listdir(root)
+    except OSError:
+        return {"ok": False, "error": "Session not found."}, 404
+    for group in groups:
+        session_dir = os.path.join(root, group, session_id)
+        summary_path = os.path.join(session_dir, "summary.json")
+        if not os.path.isfile(summary_path):
+            continue
+        # The directory name is the id per the layout; when summary.json
+        # also carries one, it must agree before we touch anything.
+        try:
+            with open(summary_path, "r", encoding="utf-8") as f:
+                info = (json.load(f) or {}).get("info") or {}
+        except (OSError, ValueError, TypeError):
+            info = {}
+        if info.get("id") and info["id"] != session_id:
+            continue
+        try:
+            move_to_trash(session_dir)
+        except OSError:
+            return {
+                "ok": False,
+                "error": "Could not move session to Trash.",
+            }, 500
+        cache.delete(f"grok:{session_dir}")
+        return {"ok": True}, 200
+    return {"ok": False, "error": "Session not found."}, 404

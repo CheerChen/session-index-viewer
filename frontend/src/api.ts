@@ -24,19 +24,49 @@ export async function fetchSessionMessages(
   return res.json();
 }
 
-export async function deleteDevinSession(
-  sessionId: string,
+export async function deleteSession(
+  session: Pick<Session, "source" | "session_id">,
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch("/api/session/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      source: "devin",
-      session_id: sessionId,
-      confirm_session_id: sessionId,
+      source: session.source,
+      session_id: session.session_id,
+      confirm_session_id: session.session_id,
     }),
   });
   const result = (await res.json()) as { ok: boolean; error?: string };
+  if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+  return result;
+}
+
+export interface DeleteResult {
+  source: string;
+  session_id: string;
+  ok: boolean;
+  error?: string;
+}
+
+export async function deleteSessions(
+  sessions: Pick<Session, "source" | "session_id">[],
+): Promise<{ ok: boolean; results: DeleteResult[]; error?: string }> {
+  const res = await fetch("/api/sessions/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      confirmed: true,
+      sessions: sessions.map((s) => ({
+        source: s.source,
+        session_id: s.session_id,
+      })),
+    }),
+  });
+  const result = (await res.json()) as {
+    ok: boolean;
+    results: DeleteResult[];
+    error?: string;
+  };
   if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
   return result;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { deleteDevinSession } from "../api";
+import { deleteSession } from "../api";
 import type { Session } from "../types";
 
 interface DeleteSessionModalProps {
@@ -46,7 +46,7 @@ export function DeleteSessionModal({
     setDeleting(true);
     setError(null);
     try {
-      await deleteDevinSession(session.session_id);
+      await deleteSession(session);
       onDeleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete session.");
@@ -69,15 +69,17 @@ export function DeleteSessionModal({
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="delete-confirm-eyebrow">Delete Devin session</div>
+        <div className="delete-confirm-eyebrow">
+          Delete {session.source} session
+        </div>
         <h2 id={titleId}>Delete this session?</h2>
         <div className="delete-confirm-session">
           <strong>{session.title || session.session_id}</strong>
           <code>{session.session_id}</code>
         </div>
         <p>
-          This permanently deletes the conversation and its associated Devin
-          data. This action cannot be undone.
+          The session's data is moved to the Trash (a recovery dump for
+          database-backed tools). You can restore it from there if needed.
         </p>
         {error && <div className="delete-confirm-error">{error}</div>}
         <div className="delete-confirm-actions">
@@ -96,7 +98,7 @@ export function DeleteSessionModal({
             disabled={deleting}
             onClick={() => void handleDelete()}
           >
-            {deleting ? "Deleting…" : "Delete permanently"}
+            {deleting ? "Deleting…" : "Move to Trash"}
           </button>
         </div>
       </div>

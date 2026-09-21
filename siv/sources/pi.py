@@ -16,7 +16,7 @@ from datetime import datetime
 
 from ..config import PI_GLOB
 from ..text import usable_user_text
-from .jsonl_files import collect_jsonl
+from .jsonl_files import collect_jsonl, delete_file_session
 
 
 def _text_blocks(content):
@@ -143,3 +143,13 @@ def parse_pi(records):
 def collect(limit):
     """Return up to `limit` Pi session entries (mtime-sorted candidates)."""
     return collect_jsonl(PI_GLOB, "pi", parse_pi, limit)
+
+
+def delete_session(session_id):
+    """Trash the .jsonl whose session meta record carries this id."""
+    def extract(record):
+        if record.get("type") != "session":
+            return ""
+        return record.get("id") or ""
+
+    return delete_file_session(PI_GLOB, session_id, extract)

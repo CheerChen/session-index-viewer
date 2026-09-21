@@ -1,13 +1,12 @@
-import type { SourceFilter } from "../types";
+import type { SourceFilter, TurnsFilter } from "../types";
 
 interface ToolbarProps {
   query: string;
   onQueryChange: (value: string) => void;
   source: SourceFilter;
   onSourceChange: (value: SourceFilter) => void;
-  host: string;
-  onHostChange: (value: string) => void;
-  hosts: string[];
+  turns: TurnsFilter;
+  onTurnsChange: (value: TurnsFilter) => void;
   onRefresh: () => void;
 }
 
@@ -16,9 +15,8 @@ export function Toolbar({
   onQueryChange,
   source,
   onSourceChange,
-  host,
-  onHostChange,
-  hosts,
+  turns,
+  onTurnsChange,
   onRefresh,
 }: ToolbarProps) {
   return (
@@ -67,16 +65,15 @@ export function Toolbar({
 
       <div className="field">
         <select
-          aria-label="Filter by host"
-          value={host}
-          onChange={(e) => onHostChange(e.target.value)}
+          aria-label="Filter by user turns"
+          title="Show sessions with at most this many user turns"
+          value={turns}
+          onChange={(e) => onTurnsChange(e.target.value as TurnsFilter)}
         >
-          <option value="all">All Hosts</option>
-          {hosts.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
+          <option value="any">All Turns</option>
+          <option value="1">≤ 1 turn</option>
+          <option value="2">≤ 2 turns</option>
+          <option value="3">≤ 3 turns</option>
         </select>
       </div>
 

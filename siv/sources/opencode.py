@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from .. import cache
 from ..config import OPENCODE_DB
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
+from ..trash import delete_db_session
 
 
 def _iso(ms):
@@ -168,3 +169,13 @@ def collect(limit):
     except sqlite3.Error:
         return []
     return entries
+
+
+def delete_session(session_id):
+    """Archive the session's rows to Trash, then delete them from the DB."""
+    result, status = delete_db_session(
+        OPENCODE_DB, "session", session_id, "opencode"
+    )
+    if result.get("ok"):
+        cache.delete(f"opencode:{session_id}")
+    return result, status

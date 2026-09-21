@@ -16,13 +16,33 @@ from .config import (
     INDEX_HTML,
     LEGACY_HTML,
     MAX_LIMIT,
+    OPENCODE_ID_RE,
     PORT,
     RESUME_SOURCES,
     SESSION_ID_RE,
 )
 from .resume import open_in_terminal, resume_command
 from .scan import scan_sessions
-from .sources import devin
+from .sources import claude, codex, copilot, devin, grok, opencode, pi
+from .trash import trash_available
+
+# Per-source delete adapters; every one leaves a recoverable artifact in
+# ~/.Trash (moved file/dir or a JSON row dump).
+DELETE_HANDLERS = {
+    "claude": claude.delete_session,
+    "codex": codex.delete_session,
+    "copilot": copilot.delete_session,
+    "devin": devin.delete_session,
+    "grok": grok.delete_session,
+    "opencode": opencode.delete_session,
+    "pi": pi.delete_session,
+}
+
+# Session-id shapes differ per tool; used by both resume and delete.
+SOURCE_ID_RES = {
+    "devin": DEVIN_ID_RE,
+    "opencode": OPENCODE_ID_RE,
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -37,12 +57,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _origin_allowed(self):
         # Browsers can fire cross-origin POSTs at localhost; only accept
-        # requests from our own page (or non-browser clients like curl).
+        # requests from a localhost origin or non-browser clients like
+        # curl. Any local port counts — the browser preview proxies the
+        # UI through its own port, so matching only PORT breaks it.
         origin = self.headers.get("Origin")
-        return origin is None or origin in (
-            f"http://localhost:{PORT}",
-            f"http://127.0.0.1:{PORT}",
-        )
+        if origin is None:
+            return True
+        return urlparse(origin).hostname in ("localhost", "127.0.0.1", "::1")
 
     def _serve_file(self, path, content_type, cache="no-store"):
         try:
@@ -115,9 +136,36 @@ class Handler(BaseHTTPRequestHandler):
                 html = INDEX_HTML if os.path.isfile(INDEX_HTML) else LEGACY_HTML
                 self._serve_file(html, "text/html; charset=utf-8")
 
+    def _delete_one(self, source, session_id):
+        """Validate + dispatch one delete. Returns (result, status)."""
+        handler = DELETE_HANDLERS.get(source)
+        if handler is None:
+            return {
+                "source": source,
+                "session_id": session_id,
+                "ok": False,
+                "error": "unsupported source",
+            }, 400
+        id_re = SOURCE_ID_RES.get(source, SESSION_ID_RE)
+        if not isinstance(session_id, str) or not id_re.fullmatch(session_id):
+            return {
+                "source": source,
+                "session_id": session_id,
+                "ok": False,
+                "error": "bad session id",
+            }, 400
+        result, status = handler(session_id)
+        result["source"] = source
+        result["session_id"] = session_id
+        return result, status
+
     def do_POST(self):
         path = urlparse(self.path).path
-        if path not in ("/api/resume", "/api/session/delete"):
+        if path not in (
+            "/api/resume",
+            "/api/session/delete",
+            "/api/sessions/delete",
+        ):
             self.send_error(404)
             return
         if not self._origin_allowed():
@@ -137,19 +185,51 @@ class Handler(BaseHTTPRequestHandler):
         session_id = payload.get("session_id", "")
         if path == "/api/session/delete":
             confirmation = payload.get("confirm_session_id", "")
-            if source != "devin":
-                self._send_json({"ok": False, "error": "unsupported source"}, 400)
-                return
-            if not isinstance(session_id, str) or not DEVIN_ID_RE.fullmatch(
-                session_id
-            ):
-                self._send_json({"ok": False, "error": "bad session id"}, 400)
+            if not trash_available():
+                self._send_json(
+                    {
+                        "ok": False,
+                        "error": "~/.Trash is not available; deletion is disabled.",
+                    },
+                    503,
+                )
                 return
             if confirmation != session_id:
                 self._send_json({"ok": False, "error": "confirmation mismatch"}, 400)
                 return
-            result, status = devin.delete_session(session_id)
+            result, status = self._delete_one(source, session_id)
             self._send_json(result, status)
+            return
+
+        if path == "/api/sessions/delete":
+            items = payload.get("sessions")
+            if not trash_available():
+                self._send_json(
+                    {
+                        "ok": False,
+                        "error": "~/.Trash is not available; deletion is disabled.",
+                    },
+                    503,
+                )
+                return
+            if payload.get("confirmed") is not True:
+                self._send_json({"ok": False, "error": "not confirmed"}, 400)
+                return
+            if (
+                not isinstance(items, list)
+                or not items
+                or len(items) > 500
+                or not all(isinstance(i, dict) for i in items)
+            ):
+                self._send_json({"ok": False, "error": "bad sessions list"}, 400)
+                return
+            results = [
+                self._delete_one(i.get("source"), i.get("session_id", ""))[0]
+                for i in items
+            ]
+            self._send_json(
+                {"ok": all(r.get("ok") for r in results), "results": results}
+            )
             return
 
         cwd = payload.get("cwd", "")
@@ -158,7 +238,7 @@ class Handler(BaseHTTPRequestHandler):
         if source not in RESUME_SOURCES:
             self._send_json({"ok": False, "error": "unknown source"}, 400)
             return
-        id_re = DEVIN_ID_RE if source == "devin" else SESSION_ID_RE
+        id_re = SOURCE_ID_RES.get(source, SESSION_ID_RE)
         if not id_re.match(session_id):
             self._send_json({"ok": False, "error": "bad session id"}, 400)
             return

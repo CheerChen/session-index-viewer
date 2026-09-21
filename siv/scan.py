@@ -9,6 +9,7 @@ from .host import host_for
 from .resume import resume_command
 from .sources import claude, codex, copilot, devin, grok, opencode, pi
 from .sources.jsonl_files import cached_entry
+from .trash import trash_available
 
 
 def scan_sessions(limit):
@@ -80,6 +81,7 @@ def scan_sessions(limit):
 
     items.sort(key=lambda e: e["sort_ts"], reverse=True)
     items = items[:limit]
+    deletable = trash_available()
     return [
         {
             "source": e["source"],
@@ -93,6 +95,8 @@ def scan_sessions(limit):
             "last_assistant": e["last_assistant"],
             "resume_command": resume_command(e["source"], e["session_id"], e["cwd"]),
             "usage": e.get("usage"),
+            "deletable": deletable,
+            "origin": e.get("origin") or "",
         }
         for e in items
     ]

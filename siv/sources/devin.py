@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from .. import cache
 from ..config import DEVIN_DB
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
+from ..trash import dump_db_session, dump_to_trash
 
 
 def collect(limit):
@@ -303,18 +304,22 @@ def _executable():
 def delete_session(session_id):
     if not os.path.isfile(DEVIN_DB):
         return {"ok": False, "error": "Session not found."}, 404
+    # `devin rm` removes the row permanently, so archive everything
+    # belonging to the session to Trash first as the recoverable copy.
     try:
         conn = sqlite3.connect(f"file:{DEVIN_DB}?mode=ro", uri=True)
         try:
-            exists = conn.execute(
-                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
+            dump, found = dump_db_session(conn, "sessions", session_id)
         finally:
             conn.close()
     except sqlite3.Error:
         return {"ok": False, "error": "Unable to read Devin sessions."}, 500
-    if exists is None:
+    if not found:
         return {"ok": False, "error": "Session not found."}, 404
+    try:
+        dump_to_trash(f"siv-devin-{session_id}.json", dump)
+    except OSError:
+        return {"ok": False, "error": "Could not write Trash archive."}, 500
 
     executable = _executable()
     if executable is None:

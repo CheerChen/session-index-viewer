@@ -73,7 +73,19 @@ Grok often only has that size signal (labelled **size only** on the chip).
 | `c` | Copy resume command (not ⌘C — system copy still works) |
 | `p` | Pin / unpin |
 | `u` | Open usage modal (when usage exists) |
+| `x` | Delete session (moves data to Trash, confirmed first) |
 | `⌘K` / `Ctrl+K` | Command palette |
+
+## Deleting sessions
+
+Every card has a trash button (and `x` on the active card) that asks for
+confirmation, then removes the session **via `~/.Trash`** — file-backed
+sources (Claude, Codex, Pi, Grok) are moved wholesale; database-backed
+sources (Devin, Copilot, opencode) get a JSON dump of the session's rows
+written to Trash before the rows are removed. Deletion is disabled when
+`~/.Trash` doesn't exist. A **Turns** filter in the toolbar (`≤ 1/2/3`)
+surfaces low-activity sessions — e.g. one-shot "reply with just: ok"
+noise — for quick pruning.
 
 ## Pieces
 

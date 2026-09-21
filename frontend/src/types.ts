@@ -27,7 +27,17 @@ export interface Session {
   last_assistant: string;
   resume_command: string;
   usage: SessionUsage | null;
+  // Server sets this false when ~/.Trash is unavailable — the delete UI
+  // hides entirely rather than erroring at click time.
+  deletable?: boolean;
+  // Client that started the session (codex originator: codex-tui,
+  // codex_vscode, codex_exec, acpx, codex_cli_rs). Empty when unknown.
+  origin?: string;
 }
+
+// Toolbar "Turns" filter: maximum user turns a session may have.
+// "any" disables the filter; numeric strings mean user_turns <= N.
+export type TurnsFilter = "any" | "1" | "2" | "3";
 
 export type SourceFilter =
   | "all"

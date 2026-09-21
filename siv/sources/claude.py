@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ..config import CLAUDE_GLOB
 from ..text import blocks_text, usable_user_text
-from .jsonl_files import collect_jsonl
+from .jsonl_files import collect_jsonl, delete_file_session
 
 
 def claude_user_text(record):
@@ -147,3 +147,10 @@ def parse_claude(records):
 def collect(limit):
     """Return up to `limit` Claude session entries (mtime-sorted candidates)."""
     return collect_jsonl(CLAUDE_GLOB, "claude", parse_claude, limit)
+
+
+def delete_session(session_id):
+    """Trash the .jsonl whose records carry this sessionId."""
+    return delete_file_session(
+        CLAUDE_GLOB, session_id, lambda r: r.get("sessionId") or ""
+    )

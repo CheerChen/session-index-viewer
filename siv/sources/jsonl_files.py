@@ -1,11 +1,13 @@
 """Shared JSONL path scanning + mtime cache for Claude / Codex files."""
 
 import glob
+import json
 import os
 
 from .. import cache
 from ..io_util import decode_records, read_lines
 from ..text import clean_inline, clean_multiline, clip
+from ..trash import move_to_trash
 
 
 def parse_file(path, parser, size):
@@ -65,3 +67,48 @@ def collect_jsonl(pattern, source, parser, limit):
         entry.setdefault("source", source)
         entries.append(entry)
     return entries
+
+
+def _quick_id(path, extract_id, max_lines=10):
+    """Session id from the first few JSONL records, or None.
+
+    Meta records aren't guaranteed to be line 1, so scan a small head
+    window instead of a single line.
+    """
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for i, line in enumerate(f):
+                if i >= max_lines:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                sid = extract_id(record)
+                if sid:
+                    return sid
+    except OSError:
+        pass
+    return None
+
+
+def delete_file_session(pattern, session_id, extract_id):
+    """Move the session file whose id matches into ~/.Trash.
+
+    extract_id(record) -> session id str for one parsed JSONL record.
+    The id is re-derived from file contents server-side; the client
+    never supplies a filesystem path.
+    """
+    for path in glob.glob(pattern):
+        if _quick_id(path, extract_id) != session_id:
+            continue
+        try:
+            move_to_trash(path)
+        except OSError:
+            return {"ok": False, "error": "Could not move session to Trash."}, 500
+        cache.delete(path)
+        return {"ok": True}, 200
+    return {"ok": False, "error": "Session not found."}, 404

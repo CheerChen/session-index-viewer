@@ -170,7 +170,7 @@
       .hero {
         position: relative;
         overflow: hidden;
-        padding: 28px 28px 24px;
+        padding: 18px 28px 20px;
         border: 1px solid var(--line);
         border-radius: 28px;
         background:
@@ -241,18 +241,11 @@
         outline-offset: 2px;
       }
 
-      .hero h1 {
-        margin: 18px 0 10px;
-        font-size: clamp(36px, 5vw, 62px);
-        line-height: 0.96;
-        letter-spacing: -0.04em;
-      }
-
       .toolbar {
         display: grid;
         grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 0.7fr));
         gap: 14px;
-        margin-top: 24px;
+        margin-top: 16px;
       }
 
       .field {
@@ -377,6 +370,28 @@
         border-radius: 999px;
         background: var(--chip);
         color: var(--text-muted-2);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      /* Marks sessions started by automation (codex exec / ACP / MCP)
+         rather than a person at the keyboard. Filled warning tint so it
+         reads at a glance next to the source pill. */
+      .headless-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 11px;
+        border: 1px solid
+          color-mix(in oklch, var(--usage-pressure-mid) 55%, transparent);
+        border-radius: 999px;
+        background: color-mix(
+          in oklch,
+          var(--usage-pressure-mid) 24%,
+          transparent
+        );
+        color: var(--usage-pressure-mid);
         font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -1617,6 +1632,122 @@
         outline-offset: 2px;
       }
 
+      /* Batch-delete modal extras */
+      .delete-confirm-sources {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .delete-confirm-list {
+        margin: 0;
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface-section);
+        list-style: none;
+        max-height: 200px;
+        overflow-y: auto;
+        display: grid;
+        gap: 8px;
+      }
+
+      .delete-confirm-list li {
+        display: grid;
+        gap: 2px;
+        font-size: 13px;
+        min-width: 0;
+      }
+
+      .delete-confirm-list li strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .delete-confirm-list li code {
+        font-size: 11px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .delete-confirm-more {
+        color: var(--muted);
+      }
+
+      /* Bulk-delete selection state — the card itself is the
+         affordance (accent-tinted border + faint accent wash), no
+         checkbox widget. */
+      .card.is-selected {
+        border-color: color-mix(
+          in oklch,
+          var(--accent, var(--claude)) 60%,
+          var(--line)
+        );
+        background: color-mix(
+          in oklch,
+          var(--accent, var(--claude)) 7%,
+          var(--panel-strong)
+        );
+      }
+
+      /* Floating bulk-action bar — bottom-center so it never fights
+         the back-to-top button in the corner. */
+      .selection-bar {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px 10px 20px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+        font-size: 14px;
+      }
+
+      .selection-count {
+        font-weight: 700;
+        margin-right: 4px;
+      }
+
+      .selection-bar button {
+        border: 0;
+        border-radius: 999px;
+        padding: 9px 16px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        background: var(--button-bg);
+        color: var(--button-text);
+      }
+
+      .selection-bar button:hover {
+        background: var(--button-bg-hover);
+      }
+
+      .selection-bar .selection-bar-delete {
+        background: var(--usage-pressure-high);
+        color: var(--pre-text);
+      }
+
+      .selection-bar .selection-bar-delete:hover {
+        filter: brightness(1.08);
+      }
+
+      .selection-bar button:focus-visible {
+        outline: 2px solid var(--usage-pressure-high);
+        outline-offset: 2px;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .delete-confirm-backdrop,
         .delete-confirm-modal {
@@ -1788,6 +1919,13 @@
         box-shadow: var(--shadow-pinned);
       }
 
+      .card-head-actions {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+
       .pin-button {
         flex-shrink: 0;
         border: 0;
@@ -1808,6 +1946,31 @@
 
       .pin-button.is-pinned {
         color: var(--accent, var(--codex));
+      }
+
+      .card-delete-button {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        color: var(--muted);
+        line-height: 1;
+        padding: 4px 6px;
+        border-radius: 6px;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+
+      .card-delete-button:hover {
+        background: color-mix(
+          in oklch,
+          var(--usage-pressure-high) 10%,
+          transparent
+        );
+        color: var(--usage-pressure-high);
       }
 
       /* Keyboard navigation: the active card gets a focus ring so j/k

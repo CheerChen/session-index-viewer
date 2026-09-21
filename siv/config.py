@@ -71,12 +71,18 @@ SKIP_USER_PREFIXES = (
     "<environment_context>",
     "<turn_aborted>",
     "<skill-context",
+    # Codex injects its installable-plugin marketplace list as a user-role
+    # message at session bootstrap (plugins.recommendations).
+    "<recommended_plugins",
 )
 
 SESSION_ID_RE = re.compile(r"^[0-9a-fA-F][0-9a-fA-F-]{6,62}[0-9a-fA-F]$")
 
 # Devin CLI session IDs are memorable word-pair slugs (e.g. "foamy-package").
 DEVIN_ID_RE = re.compile(r"^[a-z][a-z0-9-]{2,62}$")
+
+# opencode session IDs are "ses_" + base62-ish payload (e.g. "ses_00cb…").
+OPENCODE_ID_RE = re.compile(r"^ses_[0-9A-Za-z]{8,64}$")
 
 # Terminal app to use. "auto" prefers Ghostty > iTerm > Terminal based on
 # what's installed. Override by setting to "Ghostty", "iTerm", or "Terminal".

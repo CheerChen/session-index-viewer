@@ -2,6 +2,53 @@
 
 ## 2026-09-21
 
+### Session cleanup
+- **Delete any session via Trash.** The per-session delete flow (trash
+  button on each card, `x` on the active card, or the conversation
+  modal) now covers every source, not just Devin. File/dir-backed
+  sessions (Claude, Codex, Pi, Grok) are moved into `~/.Trash`
+  wholesale; database-backed ones (Copilot, opencode, Devin) first dump
+  all session-linked rows to a JSON archive in Trash, then remove them
+  (Devin still goes through `devin rm` for its own bookkeeping). When
+  `~/.Trash` is unavailable the API reports it and the UI hides the
+  delete affordances (`deletable` flag on each session).
+- **Turns filter.** A toolbar select (`≤ 1/2/3` user turns) surfaces
+  low-activity sessions for pruning — e.g. Pi's one-shot
+  "reply with just: ok" noise. Sessions without usage data are
+  excluded from turn-capped views rather than guessed at.
+- **Multi-select bulk delete.** `m` or ⌘-click marks a card for bulk
+  deletion (the card itself carries the selected state — accent border
+  and wash, no checkbox). With a non-empty selection a bottom-centre
+  action bar offers Select all shown / Move to Trash / Clear; `x`
+  deletes the selection instead of the active card, and `Esc` clears
+  it. A batch confirmation modal shows the per-source breakdown and a
+  title preview, then posts to a new `/api/sessions/delete` endpoint
+  that runs each item through the same per-source adapters and returns
+  per-session results — partial failures stay listed in the modal for
+  retry.
+
+### Codex origins
+- **Headless badge.** Codex sessions launched by automation
+  (`codex exec`, ACP harnesses, MCP-driven runs) now show a filled
+  amber `headless` pill next to the source pill, with the raw
+  `session_meta.originator` value in the tooltip. Interactive
+  `codex-tui` / `codex_vscode` sessions stay unmarked; unknown
+  originators are not assumed headless.
+- **Plugin recommendations no longer masquerade as prompts.** Codex
+  injects a `<recommended_plugins>` marketplace listing as a user-role
+  message at session start; it is now skipped like the other
+  boilerplate prefixes so `first_user` reflects the real prompt.
+
+### UI
+- **Hero simplified.** The headline and host filter are gone; the
+  toolbar is now a single row of search / source / turns / refresh.
+
+### Fixes
+- **opencode resume works.** `/api/resume` previously validated every
+  non-Devin session id against the hex pattern, which opencode's
+  `ses_…` ids could never satisfy. Resume and delete now share a
+  per-source id pattern.
+
 ### Terminal launch
 - **Ghostty resume opens a tab in the running instance.** Resume now uses
   Ghostty's AppleScript dictionary (≥ 1.3, `new tab in front window` /

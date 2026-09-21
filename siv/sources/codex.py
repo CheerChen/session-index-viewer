@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ..config import CODEX_GLOB
 from ..text import usable_user_text
-from .jsonl_files import collect_jsonl
+from .jsonl_files import collect_jsonl, delete_file_session
 
 
 def codex_message_text(record, role, content_type):
@@ -157,6 +157,10 @@ def parse_codex(records):
         "sort_ts": sort_ts,
         "cwd": meta.get("cwd", ""),
         "session_id": session_id,
+        # Which client started the session: codex-tui / codex_vscode are
+        # interactive; codex_exec / acpx / codex_cli_rs(mcp) are headless
+        # automation. The UI badges non-interactive origins.
+        "origin": meta.get("originator") or "",
         "title": "",
         "first_user": first_user,
         "last_user": last_user,
@@ -168,3 +172,14 @@ def parse_codex(records):
 def collect(limit):
     """Return up to `limit` Codex session entries (mtime-sorted candidates)."""
     return collect_jsonl(CODEX_GLOB, "codex", parse_codex, limit)
+
+
+def delete_session(session_id):
+    """Trash the rollout .jsonl whose session_meta carries this id."""
+    def extract(record):
+        if record.get("type") != "session_meta":
+            return ""
+        payload = record.get("payload") or {}
+        return payload.get("id") or payload.get("session_id") or ""
+
+    return delete_file_session(CODEX_GLOB, session_id, extract)

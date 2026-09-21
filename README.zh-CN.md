@@ -67,7 +67,17 @@ size 信号（chip 上标 **size only**）。
 | `c` | 复制 resume 命令（不含 ⌘C，系统复制仍可用） |
 | `p` | 置顶 / 取消置顶 |
 | `u` | 打开 usage modal（有用量数据时） |
+| `x` | 删除 session（二次确认后移入 Trash） |
 | `⌘K` / `Ctrl+K` | 命令面板 |
+
+## 删除 session
+
+每张卡片有删除按钮（或选中后按 `x`），确认后经 `~/.Trash` 移除——
+文件类 source（Claude / Codex / Pi / Grok）整体移入废纸篓；数据库类
+source（Devin / Copilot / opencode）先把该 session 的所有行导出为
+JSON 放入废纸篓，再删库里的行。`~/.Trash` 不存在时删除功能整体禁用。
+工具栏的 **Turns** 筛选（`≤ 1/2/3`）可以把低轮次会话筛出来——比如
+"reply with just: ok" 之类的单次会话——方便快速清理。
 
 ## 各部分
 

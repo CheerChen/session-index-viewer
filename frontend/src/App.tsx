@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import type { Session, SourceFilter } from "./types";
+import type { Session, SourceFilter, TurnsFilter } from "./types";
 import { useSessions } from "./hooks/useSessions";
 import { usePinned } from "./hooks/usePinned";
 import { useTheme } from "./hooks/useTheme";
@@ -13,17 +13,18 @@ import { CommandPalette } from "./components/CommandPalette";
 import { UsageModal } from "./components/UsageModal";
 import { SessionConversation } from "./components/SessionConversation";
 import { DeleteSessionModal } from "./components/DeleteSessionModal";
+import { BatchDeleteModal } from "./components/BatchDeleteModal";
 
 interface FilterState {
   query: string;
   source: SourceFilter;
-  host: string;
+  turns: TurnsFilter;
 }
 
 const INITIAL_FILTER: FilterState = {
   query: "",
   source: "all",
-  host: "all",
+  turns: "any",
 };
 
 export default function App() {
@@ -37,25 +38,30 @@ export default function App() {
   // Global conversation modal — single instance, same pattern as usage.
   const [conversationSession, setConversationSession] = useState<Session | null>(null);
   const [deleteSession, setDeleteSession] = useState<Session | null>(null);
+  // Multi-select for bulk delete — keyed by source|session_id so it
+  // survives filtering, pinning reorders, and virtualization.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [batchDelete, setBatchDelete] = useState<Session[] | null>(null);
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
   const [showTop, setShowTop] = useState(false);
-  const { query, source, host } = filter;
+  const { query, source, turns } = filter;
 
   const boardRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-
-  const hosts = useMemo(
-    () => Array.from(new Set(sessions.map((s) => s.host))).toSorted(),
-    [sessions],
-  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions
       .filter((item) => {
         if (source !== "all" && item.source !== source) return false;
-        if (host !== "all" && item.host !== host) return false;
+        // Sessions without usage can't be classified — exclude them
+        // from turn-capped views rather than guessing.
+        if (
+          turns !== "any" &&
+          (!item.usage || item.usage.user_turns > Number(turns))
+        )
+          return false;
         if (!q) return true;
         const haystack = [
           item.cwd,
@@ -79,7 +85,7 @@ export default function App() {
         const right = new Date(b.timestamp).getTime() || 0;
         return right - left;
       });
-  }, [sessions, query, source, host, pinnedIds]);
+  }, [sessions, query, source, turns, pinnedIds]);
 
   // Clamp activeIdx inline so we never render a stale out-of-bounds
   // selection (deriving during render avoids an extra effect commit).
@@ -142,16 +148,28 @@ export default function App() {
   const handleConversationOpen = useCallback((session: Session) => {
     setConversationSession(session);
   }, []);
+  // Delete can start from the card list or from the conversation modal.
+  // Only the latter restores the modal on cancel; track which via
+  // deleteReturnTo.
+  const [deleteReturnTo, setDeleteReturnTo] = useState<Session | null>(null);
   const handleDeleteRequest = useCallback((session: Session) => {
-    if (session.source !== "devin") return;
+    if (!session.deletable) return;
+    setDeleteReturnTo(session);
     setConversationSession(null);
     setDeleteSession(session);
   }, []);
+  const handleCardDeleteRequest = useCallback((session: Session) => {
+    if (!session.deletable) return;
+    setDeleteReturnTo(null);
+    setDeleteSession(session);
+  }, []);
   const handleDeleteCancel = useCallback(() => {
-    if (deleteSession) setConversationSession(deleteSession);
+    if (deleteReturnTo) setConversationSession(deleteReturnTo);
+    setDeleteReturnTo(null);
     setDeleteSession(null);
-  }, [deleteSession]);
+  }, [deleteReturnTo]);
   const handleDeleted = useCallback(() => {
+    setDeleteReturnTo(null);
     setDeleteSession(null);
     void reload();
   }, [reload]);
@@ -160,6 +178,50 @@ export default function App() {
   const handleUsageOpen = useCallback((session: Session) => {
     setUsageSession(session);
   }, []);
+
+  const handleToggleSelect = useCallback(
+    (idx: number) => {
+      const item = filtered[idx];
+      if (!item?.deletable) return;
+      const key = sessionKey(item);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    [filtered],
+  );
+  const selectAllShown = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const s of filtered) {
+        if (s.deletable) next.add(sessionKey(s));
+      }
+      return next;
+    });
+  }, [filtered]);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+  const openBatchDelete = useCallback(() => {
+    // Resolve against the full session list, not `filtered` — selection
+    // deliberately persists across filter changes.
+    const items = sessions.filter(
+      (s) => s.deletable && selected.has(sessionKey(s)),
+    );
+    if (items.length > 0) setBatchDelete(items);
+  }, [sessions, selected]);
+  const handleBatchDeleted = useCallback(
+    (deletedKeys: string[]) => {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const k of deletedKeys) next.delete(k);
+        return next;
+      });
+      void reload();
+    },
+    [reload],
+  );
 
   // Keyboard navigation: j/k move, Enter opens, c copies resume cmd,
   // p pins, u opens usage, Cmd+K toggles palette. Ignored while typing
@@ -177,7 +239,14 @@ export default function App() {
         return;
       }
 
-      if (paletteOpen) return;
+      if (
+        paletteOpen ||
+        deleteSession ||
+        batchDelete ||
+        usageSession ||
+        conversationSession
+      )
+        return;
       // Leave Cmd/Ctrl/Alt combos to the browser (copy, paste, print…).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
@@ -215,6 +284,23 @@ export default function App() {
         e.preventDefault();
         const item = filtered[safeActiveIdx];
         if (item?.usage) setUsageSession(item);
+      } else if (e.key === "m") {
+        e.preventDefault();
+        handleToggleSelect(safeActiveIdx);
+      } else if (e.key === "x") {
+        e.preventDefault();
+        if (selected.size > 0) {
+          openBatchDelete();
+        } else {
+          const item = filtered[safeActiveIdx];
+          if (item?.deletable) {
+            setDeleteReturnTo(null);
+            setDeleteSession(item);
+          }
+        }
+      } else if (e.key === "Escape" && selected.size > 0) {
+        e.preventDefault();
+        clearSelection();
       }
     };
     document.addEventListener("keydown", handler);
@@ -223,8 +309,16 @@ export default function App() {
     filtered,
     safeActiveIdx,
     paletteOpen,
+    deleteSession,
+    batchDelete,
+    usageSession,
+    conversationSession,
+    selected,
     togglePin,
     scrollActiveIntoView,
+    handleToggleSelect,
+    openBatchDelete,
+    clearSelection,
   ]);
 
   const jumpToSession = useCallback(
@@ -292,11 +386,6 @@ export default function App() {
             </svg>
           )}
         </button>
-        <h1>
-          Pick up
-          <br />
-          Where you left off.
-        </h1>
         <Toolbar
           query={query}
           onQueryChange={(v) => setFilter((f) => ({ ...f, query: v }))}
@@ -304,9 +393,8 @@ export default function App() {
           onSourceChange={(v) =>
             setFilter((f) => ({ ...f, source: v }))
           }
-          host={host}
-          onHostChange={(v) => setFilter((f) => ({ ...f, host: v }))}
-          hosts={hosts}
+          turns={turns}
+          onTurnsChange={(v) => setFilter((f) => ({ ...f, turns: v }))}
           onRefresh={reload}
         />
       </section>
@@ -359,11 +447,14 @@ export default function App() {
                       index={vi.index}
                       active={vi.index === safeActiveIdx}
                       pinned={isPinned(item)}
+                      selected={selected.has(sessionKey(item))}
                       queryText={queryText}
                       onPin={handlePin}
                       onActivate={handleActivate}
                       onConversationOpen={handleConversationOpen}
                       onUsageOpen={handleUsageOpen}
+                      onDeleteRequest={handleCardDeleteRequest}
+                      onToggleSelect={handleToggleSelect}
                     />
                   </div>
                 </div>
@@ -402,6 +493,38 @@ export default function App() {
           onCancel={handleDeleteCancel}
           onDeleted={handleDeleted}
         />
+      )}
+
+      {batchDelete && (
+        <BatchDeleteModal
+          sessions={batchDelete}
+          onCancel={() => setBatchDelete(null)}
+          onDeleted={handleBatchDeleted}
+        />
+      )}
+
+      {selected.size > 0 && (
+        <div className="selection-bar" role="toolbar" aria-label="Selection">
+          <span
+            className="selection-count"
+            title="m or ⌘click toggles a card · Esc clears"
+          >
+            {selected.size} selected
+          </span>
+          <button type="button" onClick={selectAllShown}>
+            Select all shown
+          </button>
+          <button
+            type="button"
+            className="selection-bar-delete"
+            onClick={openBatchDelete}
+          >
+            Move to Trash
+          </button>
+          <button type="button" onClick={clearSelection}>
+            Clear
+          </button>
+        </div>
       )}
 
       {showTop && (

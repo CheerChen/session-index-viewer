@@ -3,6 +3,7 @@ import type { Session } from "../types";
 import {
   formatRelative,
   formatTimestamp,
+  headlessOrigin,
   highlight,
   sourceAccent,
   sessionKey,
@@ -17,11 +18,14 @@ interface SessionCardProps {
   index: number;
   active: boolean;
   pinned: boolean;
+  selected: boolean;
   queryText: string;
   onPin: (index: number) => void;
   onActivate: (index: number) => void;
   onConversationOpen: (session: Session) => void;
   onUsageOpen: (session: Session) => void;
+  onDeleteRequest: (session: Session) => void;
+  onToggleSelect: (index: number) => void;
 }
 
 function SessionCardImpl({
@@ -29,14 +33,18 @@ function SessionCardImpl({
   index,
   active,
   pinned,
+  selected,
   queryText,
   onPin,
   onActivate,
   onConversationOpen,
   onUsageOpen,
+  onDeleteRequest,
+  onToggleSelect,
 }: SessionCardProps) {
   const accent = sourceAccent(session.source);
   const key = sessionKey(session);
+  const headless = headlessOrigin(session);
 
   const handleOpen = async () => {
     try {
@@ -59,6 +67,7 @@ function SessionCardImpl({
     "card",
     pinned ? "is-pinned" : "",
     active ? "is-active" : "",
+    selected ? "is-selected" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -70,6 +79,13 @@ function SessionCardImpl({
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button, a, input, textarea, select, .usage-chip")) {
+      return;
+    }
+    // Cmd+click is the mouse gesture for bulk-delete selection —
+    // Shift would collide with text selection inside the card. The
+    // card itself carries the selected visual state, no checkbox.
+    if (e.metaKey && session.deletable) {
+      onToggleSelect(index);
       return;
     }
     const sel = window.getSelection();
@@ -92,20 +108,58 @@ function SessionCardImpl({
             <span className="source-pill" style={{ color: accent }}>
               {session.source}
             </span>
+            {headless && (
+              <span
+                className="headless-pill"
+                title={`Started by automation (${headless})`}
+              >
+                headless
+              </span>
+            )}
             <span className="host-pill">{session.host}</span>
           </span>
-          <button
-            className={`pin-button ${pinned ? "is-pinned" : ""}`}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPin(index);
-            }}
-            title={pinned ? "Unpin" : "Pin to top"}
-            aria-label={pinned ? "Unpin session" : "Pin session to top"}
-          >
-            {pinned ? "★" : "☆"}
-          </button>
+          <span className="card-head-actions">
+            {session.deletable && (
+              <button
+                className="card-delete-button"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteRequest(session);
+                }}
+                title="Move to Trash (x)"
+                aria-label="Delete session"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  width="13"
+                  height="13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2.5 4h11" />
+                  <path d="M6 4V2.8c0-.4.4-.8.8-.8h2.4c.4 0 .8.4.8.8V4" />
+                  <path d="M4 4l.6 8.6c0 .6.5 1.4 1.1 1.4h4.6c.6 0 1.1-.8 1.1-1.4L12 4" />
+                </svg>
+              </button>
+            )}
+            <button
+              className={`pin-button ${pinned ? "is-pinned" : ""}`}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPin(index);
+              }}
+              title={pinned ? "Unpin" : "Pin to top"}
+              aria-label={pinned ? "Unpin session" : "Pin session to top"}
+            >
+              {pinned ? "★" : "☆"}
+            </button>
+          </span>
         </header>
 
         <div className="meta">

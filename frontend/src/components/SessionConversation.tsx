@@ -131,7 +131,7 @@ function Conversation({
             </div>
           </div>
           <div className="conv-modal-head-actions">
-            {session.source === "devin" && (
+            {session.deletable && (
               <button
                 type="button"
                 className="delete-session-trigger"

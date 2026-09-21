@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-09-21
+
+### Terminal launch
+- **Ghostty resume opens a tab in the running instance.** Resume now uses
+  Ghostty's AppleScript dictionary (≥ 1.3, `new tab in front window` /
+  `new window` with `initial input`) instead of `open -na`, which spawned a
+  throwaway second instance with its own Dock icon. The command runs in a
+  normal login shell so the tab stays usable after it exits. Ghostty < 1.3
+  still falls back to `open -na`. First use triggers a one-time macOS
+  automation permission prompt for the process hosting the server.
+
+## 2026-09-08
+
+### Fixes
+- **Devin CLI detection covers `~/.local/bin`.** The Devin executable
+  lookup now checks `~/.local/bin/devin` in addition to `PATH`,
+  Homebrew, and `/usr/local/bin`, so session deletion works when Devin
+  CLI was installed via its own installer instead of a package manager.
+
+## 2026-09-04
+
+### Devin conversations
+- **In-app conversation viewer.** Devin session cards can now be opened
+  in a conversation modal backed by a new paginated `/api/session`
+  endpoint (50 messages per page, up to 200). The backend follows the
+  active `message_nodes` chain and collapses consecutive assistant tool
+  activity into a single entry with a call count, so large sessions stay
+  responsive.
+- **Session deletion.** The conversation modal offers a confirmed
+  delete flow that calls a new delete API, removes the session via the
+  Devin CLI, and evicts the stale cache entry so the card disappears on
+  the next refresh.
+
 ## 2026-09-03
 
 ### Theme

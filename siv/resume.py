@@ -38,13 +38,36 @@ def detect_terminal():
 
 def open_in_terminal(command):
     app = detect_terminal()
+    escaped = command.replace("\\", "\\\\").replace('"', '\\"')
     if app == "Ghostty":
-        # On macOS the `ghostty` CLI can't launch the app directly; use
-        # `open -na` with --args -e. Ghostty's -e expects argv with no
-        # shell interpretation, so wrap in `zsh -l -c` to handle `&&`,
-        # PATH, and aliases from the user's shell config.
-        # --window-save-state=never prevents the new instance from
-        # restoring the previous window layout (tabs, splits, etc.).
+        # Ghostty >= 1.3 ships an AppleScript dictionary
+        # (ghostty-org/ghostty#11208). `new tab in front window` reuses the
+        # running instance instead of spawning a second Dock icon the way
+        # `open -na` does. The command goes through `initial input` so it
+        # runs in the user's login shell and the tab stays open after the
+        # command exits — same semantics as Terminal's `do script`. A
+        # trailing `return` submits the line (initial input is pasted text,
+        # not a keypress).
+        script = (
+            'tell application "Ghostty"\n'
+            "  set cfg to new surface configuration\n"
+            f'  set initial input of cfg to "{escaped}" & return\n'
+            "  if (count of windows) > 0 then\n"
+            "    new tab in front window with configuration cfg\n"
+            "  else\n"
+            "    new window with configuration cfg\n"
+            "  end if\n"
+            "  activate\n"
+            "end tell"
+        )
+        if subprocess.run(["osascript", "-e", script]).returncode == 0:
+            return
+        # Fallback for Ghostty < 1.3 (no AppleScript dictionary): `open -na`
+        # launches a throwaway instance — -e implies
+        # quit-after-last-window-closed. -e expects argv with no shell
+        # interpretation, so wrap in `zsh -l -c` to handle `&&`, PATH, and
+        # aliases from the user's shell config. --window-save-state=never
+        # prevents restoring the previous window layout.
         subprocess.Popen(
             [
                 "open",
@@ -61,7 +84,6 @@ def open_in_terminal(command):
         )
         return
 
-    escaped = command.replace("\\", "\\\\").replace('"', '\\"')
     if app == "iTerm":
         script = (
             'tell application "iTerm"\n'

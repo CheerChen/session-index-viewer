@@ -45,7 +45,7 @@ cd frontend && npm install && npm run build
 | Claude Code | `~/.claude/projects/*/*.jsonl` | `claude --resume <id>` | 累加 assistant 的 `message.usage`；Context 约为单轮 input+cache 峰值 |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | `codex resume <id>` | 取最后一次累计 `token_count`；Context 约为各轮 total 最大 |
 | Devin | `~/.local/share/devin/cli/sessions.db` | `devin -r <id>` | 从 `message_nodes` 聚合 |
-| Grok | `$GROK_HOME/sessions`（默认 `~/.grok/sessions`） | `grok --resume <id>` | 磁盘上多为 **上下文占用**（`signals.json`）；无头单次（`is_non_interactive`）会跳过 |
+| Grok | `$GROK_HOME/sessions`（默认 `~/.grok/sessions`） | `grok --resume <id>` | 磁盘上多为 **上下文占用**（`signals.json`） |
 | Pi | `~/.pi/agent/sessions/*/*.jsonl` | `pi --session <id>` | 累加每轮 assistant 的 `message.usage`；Context 约为各轮 total 最大 |
 | Copilot CLI | `~/.copilot/session-store.db` | `copilot --resume <id>` | 累加每轮 `assistant_usage_events`；Context 约为单轮 input 峰值 |
 | opencode | `~/.local/share/opencode/opencode.db` | `opencode --session <id>` | 取 `session` 累计 token 汇总；Context 约为单条 assistant 消息 total 最大 |
@@ -69,6 +69,25 @@ size 信号（chip 上标 **size only**）。
 | `u` | 打开 usage modal（有用量数据时） |
 | `x` | 删除 session（二次确认后移入 Trash） |
 | `⌘K` / `Ctrl+K` | 命令面板 |
+
+## Headless session
+
+没人能在里面接话的 session 算 **headless**：`-p` / exec 运行、ACP / MCP
+驱动、subagent，不论是脚本还是别的 agent 启动的。卡片上显示琥珀色
+`headless` 标签；工具栏的 origin 筛选默认隐藏它们（`Interactive` /
+`All Origins` / `Headless Only`，按浏览器记住）。搜索因为这个筛选而
+无结果时，空状态会提示并一键显示被隐藏的命中。`Headless Only` 配合
+批量删除可以一次清理。
+
+| 来源 | 判定信号 |
+|------|----------|
+| Claude Code | 所有记录的 `entrypoint` 都是 `sdk-*`（`sdk-cli` 即 `claude -p`）；之后在 TUI 里接着聊就算交互 |
+| Codex | `session_meta.originator` 为 `codex_exec`、`acpx` 或 `codex_cli_rs` |
+| Devin | 用户消息都不带 `chisel/client-message-id`。旧版 Devin 从不写这个字段，所以只对比最早带标记的 session 更新的 session 打标 |
+| Copilot CLI | `session-state/<id>/events.jsonl` 的 system prompt 含 "running in non-interactive mode" |
+| opencode | `opencode run`（`permission` 里 deny 了 `question`）或 subagent（有 `parent_id`） |
+| Grok | `prompt_context.json` 中 `is_non_interactive: true` |
+| Pi | 无法识别——`pi -p` 写出的 JSONL 与 TUI 相同 |
 
 ## 删除 session
 

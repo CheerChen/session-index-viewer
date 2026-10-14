@@ -122,7 +122,7 @@ def is_non_interactive(session_dir):
     prompt_context.json records is_non_interactive for the session's
     prompt harness. Interactive TUI sessions set it false; CLI single-turn
     probes (e.g. resume smoke tests) set it true and usually have no
-    generated_title — they clutter the index without being useful to resume.
+    generated_title.
     """
     path = os.path.join(session_dir, "prompt_context.json")
     try:
@@ -218,11 +218,6 @@ def parse_session(session_dir):
         return None
     if not SESSION_ID_RE.match(session_id):
         return None
-    # Skip headless/system-style one-shots so they don't appear as empty
-    # "Opening prompt: RESUME_OK" style cards next to real TUI work.
-    if is_non_interactive(session_dir):
-        return None
-
     updates_path = os.path.join(session_dir, "updates.jsonl")
     chat_path = os.path.join(session_dir, "chat_history.jsonl")
     first_user, last_user, last_assistant = "", "", ""
@@ -237,12 +232,15 @@ def parse_session(session_dir):
         return None  # empty / not-yet-started sessions
 
     usage = parse_usage(session_dir, summary, sort_ts)
+    headless = is_non_interactive(session_dir)
 
     return {
         "source": "grok",
         "sort_ts": sort_ts,
         "cwd": cwd,
         "session_id": session_id,
+        "origin": "grok -p" if headless else "",
+        "headless": headless,
         "title": clip(clean_inline(title), 200),
         "first_user": clip(clean_inline(first_user)),
         "last_user": clip(clean_inline(last_user)),

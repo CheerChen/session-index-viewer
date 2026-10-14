@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import type { Session, SourceFilter, TurnsFilter } from "./types";
+import type {
+  OriginFilter,
+  Session,
+  SourceFilter,
+  TurnsFilter,
+} from "./types";
 import { useSessions } from "./hooks/useSessions";
 import { usePinned } from "./hooks/usePinned";
 import { useTheme } from "./hooks/useTheme";
@@ -19,20 +24,82 @@ interface FilterState {
   query: string;
   source: SourceFilter;
   turns: TurnsFilter;
+  origin: OriginFilter;
 }
 
 const INITIAL_FILTER: FilterState = {
   query: "",
   source: "all",
   turns: "any",
+  origin: "interactive",
 };
+
+// The origin choice is a per-viewer preference, so it survives reloads.
+// Storage can be unavailable (private window, blocked site data).
+const ORIGIN_STORAGE_KEY = "originFilter";
+const ORIGIN_VALUES: readonly OriginFilter[] = ["interactive", "all", "headless"];
+
+function loadOrigin(): OriginFilter {
+  try {
+    const v = localStorage.getItem(ORIGIN_STORAGE_KEY);
+    if (v && (ORIGIN_VALUES as readonly string[]).includes(v)) {
+      return v as OriginFilter;
+    }
+  } catch {
+    // fall through to the default
+  }
+  return INITIAL_FILTER.origin;
+}
+
+function saveOrigin(value: OriginFilter) {
+  try {
+    localStorage.setItem(ORIGIN_STORAGE_KEY, value);
+  } catch {
+    // preference just won't persist
+  }
+}
+
+function matchesOrigin(item: Session, origin: OriginFilter): boolean {
+  if (origin === "all") return true;
+  return origin === "headless" ? !!item.headless : !item.headless;
+}
+
+// Everything except the origin filter; the empty state reuses this to
+// count matches the origin filter is hiding.
+function matchesRest(
+  item: Session,
+  source: SourceFilter,
+  turns: TurnsFilter,
+  q: string,
+): boolean {
+  if (source !== "all" && item.source !== source) return false;
+  // Sessions without usage can't be classified — exclude them
+  // from turn-capped views rather than guessing.
+  if (turns !== "any" && (!item.usage || item.usage.user_turns > Number(turns)))
+    return false;
+  if (!q) return true;
+  const haystack = [
+    item.cwd,
+    item.session_id,
+    item.title,
+    item.first_user,
+    item.last_user,
+    item.last_assistant,
+  ]
+    .join("\n")
+    .toLowerCase();
+  return haystack.includes(q);
+}
 
 export default function App() {
   const { sessions, error, loading, reload } = useSessions();
   const { pinnedIds, toggle: togglePin, has: isPinned } = usePinned();
   const { theme, toggle: toggleTheme } = useTheme();
 
-  const [filter, setFilter] = useState<FilterState>(INITIAL_FILTER);
+  const [filter, setFilter] = useState<FilterState>(() => ({
+    ...INITIAL_FILTER,
+    origin: loadOrigin(),
+  }));
   const [activeIdx, setActiveIdx] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Global conversation modal — single instance, same pattern as usage.
@@ -45,7 +112,7 @@ export default function App() {
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
   const [showTop, setShowTop] = useState(false);
-  const { query, source, turns } = filter;
+  const { query, source, turns, origin } = filter;
 
   const boardRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -53,28 +120,10 @@ export default function App() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sessions
-      .filter((item) => {
-        if (source !== "all" && item.source !== source) return false;
-        // Sessions without usage can't be classified — exclude them
-        // from turn-capped views rather than guessing.
-        if (
-          turns !== "any" &&
-          (!item.usage || item.usage.user_turns > Number(turns))
-        )
-          return false;
-        if (!q) return true;
-        const haystack = [
-          item.cwd,
-          item.session_id,
-          item.title,
-          item.first_user,
-          item.last_user,
-          item.last_assistant,
-        ]
-          .join("\n")
-          .toLowerCase();
-        return haystack.includes(q);
-      })
+      .filter(
+        (item) =>
+          matchesOrigin(item, origin) && matchesRest(item, source, turns, q),
+      )
       .sort((a, b) => {
         // Pinned sessions float above the rest; within each group,
         // newest first.
@@ -85,7 +134,21 @@ export default function App() {
         const right = new Date(b.timestamp).getTime() || 0;
         return right - left;
       });
-  }, [sessions, query, source, turns, pinnedIds]);
+  }, [sessions, query, source, turns, origin, pinnedIds]);
+
+  // Matches the origin filter alone is hiding — only computed when
+  // nothing is shown, to offer a one-click switch.
+  const hiddenByOrigin = useMemo(() => {
+    if (filtered.length > 0 || origin === "all") return 0;
+    const q = query.trim().toLowerCase();
+    return sessions.filter((item) => matchesRest(item, source, turns, q))
+      .length;
+  }, [filtered.length, sessions, query, source, turns, origin]);
+
+  const setOrigin = useCallback((value: OriginFilter) => {
+    saveOrigin(value);
+    setFilter((f) => ({ ...f, origin: value }));
+  }, []);
 
   // Clamp activeIdx inline so we never render a stale out-of-bounds
   // selection (deriving during render avoids an extra effect commit).
@@ -324,7 +387,11 @@ export default function App() {
   const jumpToSession = useCallback(
     (item: Session) => {
       setPaletteOpen(false);
-      setFilter(INITIAL_FILTER);
+      // Keep the origin choice unless it would hide the target.
+      setFilter((f) => ({
+        ...INITIAL_FILTER,
+        origin: matchesOrigin(item, f.origin) ? f.origin : "all",
+      }));
       // Defer the index lookup until after the filter clears.
       requestAnimationFrame(() => {
         const idx = filtered.findIndex(
@@ -395,6 +462,8 @@ export default function App() {
           }
           turns={turns}
           onTurnsChange={(v) => setFilter((f) => ({ ...f, turns: v }))}
+          origin={origin}
+          onOriginChange={setOrigin}
           onRefresh={reload}
         />
       </section>
@@ -416,6 +485,20 @@ export default function App() {
         {!loading && !error && filtered.length === 0 && (
           <div className="empty">
             No matching sessions. Try a different query.
+            {hiddenByOrigin > 0 && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="empty-action"
+                  onClick={() => setOrigin("all")}
+                >
+                  Show {hiddenByOrigin}{" "}
+                  {origin === "interactive" ? "headless" : "interactive"}{" "}
+                  {hiddenByOrigin === 1 ? "match" : "matches"}
+                </button>
+              </>
+            )}
           </div>
         )}
         {!loading && !error && filtered.length > 0 && (

@@ -6,6 +6,11 @@ from ..config import CLAUDE_GLOB
 from ..text import blocks_text, usable_user_text
 from .jsonl_files import collect_jsonl, delete_file_session
 
+# Every record carries the client that wrote it: `cli` (TUI) and the IDE /
+# desktop frontends are interactive; `sdk-cli` (`claude -p`), `sdk-ts` and
+# `sdk-py` are programmatic runs with nobody at the keyboard.
+HEADLESS_ENTRYPOINT_PREFIX = "sdk-"
+
 
 def claude_user_text(record):
     content = (record.get("message") or {}).get("content")
@@ -39,8 +44,17 @@ def parse_claude(records):
     user_turns = 0
     messages = 0
     peak_context_tokens = 0
+    origin = ""
+    # A headless run later resumed in the TUI counts as interactive, so
+    # one non-SDK entrypoint anywhere clears the flag.
+    interactive = False
 
     for record in records:
+        entrypoint = record.get("entrypoint") or ""
+        if entrypoint:
+            origin = origin or entrypoint
+            if not entrypoint.startswith(HEADLESS_ENTRYPOINT_PREFIX):
+                interactive = True
         ts = record.get("timestamp") or ""
         if ts:
             if not first_ts:
@@ -136,6 +150,8 @@ def parse_claude(records):
         "sort_ts": sort_ts,
         "cwd": cwd,
         "session_id": session_id,
+        "origin": origin,
+        "headless": bool(origin) and not interactive,
         "title": title,
         "first_user": first_user,
         "last_user": last_user,

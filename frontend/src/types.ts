@@ -30,14 +30,21 @@ export interface Session {
   // Server sets this false when ~/.Trash is unavailable — the delete UI
   // hides entirely rather than erroring at click time.
   deletable?: boolean;
-  // Client that started the session (codex originator: codex-tui,
-  // codex_vscode, codex_exec, acpx, codex_cli_rs). Empty when unknown.
+  // Client that started the session (Codex originator, Claude
+  // entrypoint, or a launch-mode label like "copilot -p"). Empty when
+  // unknown.
   origin?: string;
+  // Server-side verdict: nobody could reply in this session (`-p` /
+  // exec runs, ACP/MCP drivers, subagents).
+  headless?: boolean;
 }
 
 // Toolbar "Turns" filter: maximum user turns a session may have.
 // "any" disables the filter; numeric strings mean user_turns <= N.
 export type TurnsFilter = "any" | "1" | "2" | "3";
+
+// Toolbar "Origin" filter. Headless sessions are hidden by default.
+export type OriginFilter = "interactive" | "all" | "headless";
 
 export type SourceFilter =
   | "all"

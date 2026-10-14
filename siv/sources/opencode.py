@@ -42,6 +42,30 @@ def _model_id(raw):
     return ""
 
 
+def _headless_origin(parent_id, permission):
+    """Label sessions nobody can reply in, or "" for interactive ones.
+
+    `opencode run` stamps the session with a ruleset that denies the
+    `question` tool (there is no one to ask); TUI sessions leave
+    `permission` NULL. Subagent sessions (parent_id set) are driven by
+    their parent agent.
+    """
+    if parent_id:
+        return "subagent"
+    try:
+        rules = json.loads(permission) if permission else []
+    except (ValueError, TypeError):
+        return ""
+    if isinstance(rules, list) and any(
+        isinstance(r, dict)
+        and r.get("permission") == "question"
+        and r.get("action") == "deny"
+        for r in rules
+    ):
+        return "opencode run"
+    return ""
+
+
 def _text_part(conn, sid, role, newest):
     order = "DESC" if newest else "ASC"
     row = conn.execute(
@@ -65,7 +89,8 @@ def collect(limit):
         sessions = conn.execute(
             "SELECT id, directory, title, time_created, time_updated, "
             "  tokens_input, tokens_output, tokens_reasoning, "
-            "  tokens_cache_read, tokens_cache_write, model "
+            "  tokens_cache_read, tokens_cache_write, model, "
+            "  parent_id, permission "
             "FROM session ORDER BY time_updated DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -117,6 +142,8 @@ def collect(limit):
             t_cr,
             t_cw,
             model,
+            parent_id,
+            permission,
         ) in sessions:
             cache_key = f"opencode:{sid}"
             hit = cache.get(cache_key)
@@ -149,11 +176,14 @@ def collect(limit):
                 "model": _model_id(model),
             }
 
+            origin = _headless_origin(parent_id, permission)
             entry = {
                 "source": "opencode",
                 "sort_ts": _iso(time_updated) or _iso(time_created),
                 "cwd": directory or "",
                 "session_id": sid,
+                "origin": origin,
+                "headless": bool(origin),
                 "title": clip(clean_inline(title or ""), 200),
                 "first_user": clip(clean_inline(first_user)),
                 "last_user": clip(clean_inline(last_user)),

@@ -108,14 +108,11 @@ export function sessionKey(session: {
   return `${session.source}|${session.session_id}`;
 }
 
-// Codex originators that mean "started by automation, not a person":
-// codex_exec = `codex exec`, acpx = ACP clients (batch harnesses like
-// backpass), codex_cli_rs + source:mcp = MCP-driven. codex-tui and
-// codex_vscode are interactive and get no badge; unknown values stay
-// unbadged so a future interactive frontend isn't mislabeled.
-const HEADLESS_ORIGINS = new Set(["codex_exec", "acpx", "codex_cli_rs"]);
-
-export function headlessOrigin(session: { origin?: string }): string {
-  const origin = session.origin || "";
-  return HEADLESS_ORIGINS.has(origin) ? origin : "";
+// Badge label for headless sessions ("" when interactive). Each source
+// adapter decides headless-ness; origin is just the tooltip detail.
+export function headlessOrigin(session: {
+  origin?: string;
+  headless?: boolean;
+}): string {
+  return session.headless ? session.origin || "headless" : "";
 }

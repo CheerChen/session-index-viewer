@@ -19,6 +19,25 @@ from ..config import COPILOT_DB
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import delete_db_session
 
+# session-store.db does not record how a session was launched (`copilot -p`
+# and the TUI both write client_name github/cli). The per-session event log
+# does: its system prompt tells the model it runs non-interactively.
+COPILOT_STATE_DIR = os.path.join(os.path.dirname(COPILOT_DB), "session-state")
+NON_INTERACTIVE_MARKER = "running in non-interactive mode"
+
+
+def is_non_interactive(sid):
+    """True when the session's first system message is the -p prompt."""
+    path = os.path.join(COPILOT_STATE_DIR, sid, "events.jsonl")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if '"type":"system.message"' in line:
+                    return NON_INTERACTIVE_MARKER in line
+    except OSError:
+        pass
+    return False
+
 
 def collect(limit):
     if not os.path.isfile(COPILOT_DB):
@@ -101,11 +120,14 @@ def collect(limit):
                 usage["user_turns"] = user_turns
                 usage["messages"] = len(turns)
 
+            headless = is_non_interactive(sid)
             entry = {
                 "source": "copilot",
                 "sort_ts": updated_at or created_at or "",
                 "cwd": cwd or "",
                 "session_id": sid,
+                "origin": "copilot -p" if headless else "",
+                "headless": headless,
                 "title": clip(clean_inline(summary or ""), 200),
                 "first_user": clip(clean_inline(first_user)),
                 "last_user": clip(clean_inline(last_user)),

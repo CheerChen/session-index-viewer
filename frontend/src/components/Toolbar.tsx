@@ -1,4 +1,4 @@
-import type { SourceFilter, TurnsFilter } from "../types";
+import type { OriginFilter, SourceFilter, TurnsFilter } from "../types";
 
 interface ToolbarProps {
   query: string;
@@ -7,6 +7,8 @@ interface ToolbarProps {
   onSourceChange: (value: SourceFilter) => void;
   turns: TurnsFilter;
   onTurnsChange: (value: TurnsFilter) => void;
+  origin: OriginFilter;
+  onOriginChange: (value: OriginFilter) => void;
   onRefresh: () => void;
 }
 
@@ -17,6 +19,8 @@ export function Toolbar({
   onSourceChange,
   turns,
   onTurnsChange,
+  origin,
+  onOriginChange,
   onRefresh,
 }: ToolbarProps) {
   return (
@@ -74,6 +78,19 @@ export function Toolbar({
           <option value="1">≤ 1 turn</option>
           <option value="2">≤ 2 turns</option>
           <option value="3">≤ 3 turns</option>
+        </select>
+      </div>
+
+      <div className="field">
+        <select
+          aria-label="Filter by origin"
+          title="Headless = started by automation (-p / exec runs, subagents)"
+          value={origin}
+          onChange={(e) => onOriginChange(e.target.value as OriginFilter)}
+        >
+          <option value="interactive">Interactive</option>
+          <option value="all">All Origins</option>
+          <option value="headless">Headless Only</option>
         </select>
       </div>
 

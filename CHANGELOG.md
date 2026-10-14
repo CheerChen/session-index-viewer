@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-14
+
+### Headless sessions
+- **Every source except Pi now flags headless sessions**, not just
+  Codex. The verdict is made per source adapter (`headless` on each
+  session; `origin` carries the tooltip detail); see the README for the
+  signal each tool leaves on disk. Pi's `-p` runs are indistinguishable
+  from TUI sessions and stay unflagged.
+- **Origin filter.** A toolbar select (`Interactive` / `All Origins` /
+  `Headless Only`) hides headless sessions by default and remembers the
+  choice in localStorage. An empty search that only failed because of
+  the filter offers a one-click "Show N headless matches"; jumping to a
+  hidden session from the command palette widens the filter.
+- **Grok headless one-shots are shown and flagged** instead of being
+  dropped by the scanner, so they follow the same filter and can be
+  bulk-deleted.
+
 ## 2026-09-21
 
 ### Session cleanup

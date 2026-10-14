@@ -13,6 +13,13 @@ from ..config import DEVIN_DB
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import dump_db_session, dump_to_trash
 
+# The interactive client tags every typed message with a client message id;
+# `devin -p` writes none. Devin builds older than the tag never write it
+# either, so a missing tag only means headless for sessions created after
+# the earliest tagged session seen — older ones stay unflagged.
+CLIENT_MSG_ID = "chisel/client-message-id"
+_tagged_since = {"created_at": None}
+
 
 def collect(limit):
     """Query the Devin CLI SQLite database for non-hidden sessions and
@@ -95,11 +102,14 @@ def collect(limit):
                     "peak_context_tokens": peak or 0,
                 }
 
+        tagged_by_sid = {}
+        created_by_sid = {row[0]: row[5] for row in sessions}
         for sid, cwd, title, last_activity_at, model, created_at in sessions:
             cache_key = f"devin:{sid}"
             hit = cache.get(cache_key)
             if hit and hit[0] == last_activity_at:
                 entries.append(hit[1])
+                tagged_by_sid[sid] = hit[2]
                 continue
 
             first_user = ""
@@ -168,13 +178,46 @@ def collect(limit):
                 "last_assistant": clean_multiline(last_assistant),
                 "usage": usage,
             }
-            cache.set(cache_key, (last_activity_at, entry))
+            tagged = (
+                conn.execute(
+                    "SELECT 1 FROM message_nodes "
+                    "WHERE session_id = ? "
+                    "  AND json_extract(chat_message, '$.metadata.is_user_input') = 1 "
+                    "  AND json_extract(chat_message, ?) IS NOT NULL "
+                    "LIMIT 1",
+                    (sid, f'$.metadata.extensions."{CLIENT_MSG_ID}"'),
+                ).fetchone()
+                is not None
+            )
+            tagged_by_sid[sid] = tagged
+            cache.set(cache_key, (last_activity_at, entry, tagged))
             entries.append(entry)
 
         conn.close()
+        _flag_headless(entries, tagged_by_sid, created_by_sid)
     except sqlite3.Error:
         return []
     return entries
+
+
+def _flag_headless(entries, tagged_by_sid, created_by_sid):
+    """Set origin/headless once the tag cutoff for this batch is known."""
+    tagged_times = [
+        created_by_sid[sid] for sid, tagged in tagged_by_sid.items() if tagged
+    ]
+    since = _tagged_since["created_at"]
+    if tagged_times:
+        since = min(tagged_times + ([since] if since is not None else []))
+        _tagged_since["created_at"] = since
+    for entry in entries:
+        sid = entry["session_id"]
+        headless = (
+            since is not None
+            and not tagged_by_sid.get(sid, False)
+            and (created_by_sid.get(sid) or 0) >= since
+        )
+        entry["origin"] = "devin -p" if headless else ""
+        entry["headless"] = headless
 
 
 def _message_out(node_id, m):

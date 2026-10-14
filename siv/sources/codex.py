@@ -6,6 +6,13 @@ from ..config import CODEX_GLOB
 from ..text import usable_user_text
 from .jsonl_files import collect_jsonl, delete_file_session
 
+# session_meta.originator values that mean "started by automation":
+# codex_exec = `codex exec`, acpx = ACP clients (batch harnesses),
+# codex_cli_rs + source:mcp = MCP-driven. codex-tui / codex_vscode are
+# interactive; unknown values stay unflagged so a future interactive
+# frontend isn't mislabeled.
+HEADLESS_ORIGINATORS = {"codex_exec", "acpx", "codex_cli_rs"}
+
 
 def codex_message_text(record, role, content_type):
     payload = record.get("payload") or {}
@@ -157,10 +164,8 @@ def parse_codex(records):
         "sort_ts": sort_ts,
         "cwd": meta.get("cwd", ""),
         "session_id": session_id,
-        # Which client started the session: codex-tui / codex_vscode are
-        # interactive; codex_exec / acpx / codex_cli_rs(mcp) are headless
-        # automation. The UI badges non-interactive origins.
         "origin": meta.get("originator") or "",
+        "headless": (meta.get("originator") or "") in HEADLESS_ORIGINATORS,
         "title": "",
         "first_user": first_user,
         "last_user": last_user,

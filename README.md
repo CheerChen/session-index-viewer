@@ -50,7 +50,7 @@ cd frontend && npm install && npm run build
 | Claude Code | `~/.claude/projects/*/*.jsonl` | `claude --resume <id>` | Lifetime sums from assistant `message.usage`; context ≈ peak input+cache |
 | Codex | `~/.codex/sessions/**/rollout-*.jsonl` | `codex resume <id>` | Last cumulative `token_count`; context ≈ max per-turn total |
 | Devin | `~/.local/share/devin/cli/sessions.db` | `devin -r <id>` | Aggregated from `message_nodes` |
-| Grok | `$GROK_HOME/sessions` (default `~/.grok/sessions`) | `grok --resume <id>` | **Context size only** on disk (`signals.json`); headless one-shots (`is_non_interactive`) are skipped |
+| Grok | `$GROK_HOME/sessions` (default `~/.grok/sessions`) | `grok --resume <id>` | **Context size only** on disk (`signals.json`) |
 | Pi | `~/.pi/agent/sessions/*/*.jsonl` | `pi --session <id>` | Sums each assistant turn's `message.usage`; context ≈ largest per-turn total |
 | Copilot CLI | `~/.copilot/session-store.db` | `copilot --resume <id>` | Sums per-turn `assistant_usage_events`; context ≈ peak input tokens |
 | opencode | `~/.local/share/opencode/opencode.db` | `opencode --session <id>` | Cumulative `session` token sums; context ≈ largest assistant message total |
@@ -75,6 +75,26 @@ Grok often only has that size signal (labelled **size only** on the chip).
 | `u` | Open usage modal (when usage exists) |
 | `x` | Delete session (moves data to Trash, confirmed first) |
 | `⌘K` / `Ctrl+K` | Command palette |
+
+## Headless sessions
+
+A session is **headless** when nobody could reply in it: `-p` / exec runs,
+ACP / MCP drivers, and subagents, whether a script or another agent
+launched them. They get an amber `headless` pill, and the toolbar's
+origin filter hides them by default (`Interactive` / `All Origins` /
+`Headless Only`, remembered per browser). When a search finds nothing
+because of that filter, the empty state offers to show the hidden
+matches. `Headless Only` plus bulk delete clears them out.
+
+| Source | Signal |
+|--------|--------|
+| Claude Code | Every record's `entrypoint` is `sdk-*` (`sdk-cli` = `claude -p`); a later TUI turn makes it interactive |
+| Codex | `session_meta.originator` is `codex_exec`, `acpx` or `codex_cli_rs` |
+| Devin | No typed message carries `chisel/client-message-id`. Older Devin builds never wrote it, so only sessions newer than the earliest tagged one are flagged |
+| Copilot CLI | The system prompt in `session-state/<id>/events.jsonl` says "running in non-interactive mode" |
+| opencode | `opencode run` (`permission` denies `question`) or a subagent (`parent_id` set) |
+| Grok | `prompt_context.json` has `is_non_interactive: true` |
+| Pi | Not detectable — `pi -p` writes the same JSONL as the TUI |
 
 ## Deleting sessions
 

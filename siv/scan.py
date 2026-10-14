@@ -97,6 +97,7 @@ def scan_sessions(limit):
             "usage": e.get("usage"),
             "deletable": deletable,
             "origin": e.get("origin") or "",
+            "headless": bool(e.get("headless")),
         }
         for e in items
     ]

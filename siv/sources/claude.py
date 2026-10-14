@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ..config import CLAUDE_GLOB
 from ..text import blocks_text, usable_user_text
-from .jsonl_files import collect_jsonl, delete_file_session
+from .jsonl_files import collect_jsonl, delete_file_session, file_messages
 
 # Every record carries the client that wrote it: `cli` (TUI) and the IDE /
 # desktop frontends are interactive; `sdk-cli` (`claude -p`), `sdk-ts` and
@@ -165,8 +165,52 @@ def collect(limit):
     return collect_jsonl(CLAUDE_GLOB, "claude", parse_claude, limit)
 
 
+def _session_id(record):
+    return record.get("sessionId") or ""
+
+
+def _events(records):
+    """Main-thread user prompts and assistant blocks as conversation events.
+
+    User records whose content is a list of tool_result blocks are the
+    harness feeding tool output back, not a person typing — skipped.
+    """
+    for record in records:
+        if record.get("isSidechain") or record.get("isMeta"):
+            continue
+        rtype = record.get("type")
+        msg = record.get("message") or {}
+        content = msg.get("content")
+        ts = record.get("timestamp") or ""
+        if rtype == "user":
+            text = content if isinstance(content, str) else blocks_text(content)
+            if text:
+                yield {"role": "user", "content": text, "created_at": ts}
+        elif rtype == "assistant" and isinstance(content, list):
+            thinking = "\n".join(
+                b.get("thinking", "")
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "thinking"
+            ).strip()
+            yield {
+                "role": "assistant",
+                "content": blocks_text(content),
+                "thinking": thinking,
+                "tool_calls": sum(
+                    1
+                    for b in content
+                    if isinstance(b, dict) and b.get("type") == "tool_use"
+                ),
+                "created_at": ts,
+            }
+
+
+def messages(session_id, page=1, page_size=50):
+    return file_messages(
+        CLAUDE_GLOB, session_id, _session_id, _events, page, page_size
+    )
+
+
 def delete_session(session_id):
     """Trash the .jsonl whose records carry this sessionId."""
-    return delete_file_session(
-        CLAUDE_GLOB, session_id, lambda r: r.get("sessionId") or ""
-    )
+    return delete_file_session(CLAUDE_GLOB, session_id, _session_id)

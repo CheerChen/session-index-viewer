@@ -1204,7 +1204,7 @@
 
       async function loadSessions() {
         try {
-          const response = await fetch("/api/sessions?limit=1000", {
+          const response = await fetch("/api/sessions?fields=full", {
             cache: "no-store",
           });
           if (!response.ok) {

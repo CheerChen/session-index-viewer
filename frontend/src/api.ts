@@ -1,11 +1,17 @@
 import type { Session, SessionMessages } from "./types";
 
-export async function fetchSessions(limit = 1000): Promise<Session[]> {
-  const res = await fetch(`/api/sessions?limit=${limit}`, {
-    cache: "no-store",
-  });
+// The server returns every session up to its safety cap and flags when
+// the cap cut the list short.
+export async function fetchSessions(): Promise<{
+  sessions: Session[];
+  truncated: boolean;
+}> {
+  const res = await fetch("/api/sessions", { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return {
+    sessions: await res.json(),
+    truncated: res.headers.get("X-Sessions-Truncated") === "1",
+  };
 }
 
 export async function fetchSessionMessages(

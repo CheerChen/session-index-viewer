@@ -43,8 +43,8 @@ export function Toolbar({
         </svg>
         <input
           type="search"
-          placeholder="Search keywords"
-          aria-label="Search sessions by keyword"
+          placeholder="Search titles, prompts, paths"
+          aria-label="Search session titles, prompts, paths and ids"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
         />

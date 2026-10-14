@@ -55,8 +55,8 @@ cd frontend && npm install && npm run build
 | Copilot CLI | `~/.copilot/session-store.db` | `copilot --resume <id>` | Sums per-turn `assistant_usage_events`; context ≈ peak input tokens |
 | opencode | `~/.local/share/opencode/opencode.db` | `opencode --session <id>` | Cumulative `session` token sums; context ≈ largest assistant message total |
 
-Usage on the card is a short chip (`ctx · out · tools · turns`). Click it (or
-press **`u`** on the active card) for a modal with overview KPIs, token mix,
+Usage in the detail pane is a short chip (`ctx · out · tools · turns`). Click
+it (or press **`u`**) for a modal with overview KPIs, token mix,
 activity counts, a **context pressure bar** (peak context vs. the model's
 window limit, colour-coded green / yellow / red), and a short note on how
 that source measures tokens.
@@ -64,16 +64,32 @@ that source measures tokens.
 **Context** is peak / window occupancy — not a full-session billing total.
 Grok often only has that size signal (labelled **size only** on the chip).
 
+## Layout
+
+Two panes. The left one lists every session as a compact row (title, source,
+headless flag, project, turns, age), pinned first, then newest first. The
+right one shows the active session: its cwd, id, resume and copy actions,
+usage, and the conversation — user turns plus one folded reply per turn, with
+the tool calls in between counted rather than shown. It opens on the newest
+page; **Load earlier** pages back. Below 900px wide the list fills the
+screen and the detail pane slides over it.
+
+Search matches titles, prompts (first and last), cwd and session id, not
+replies. The list holds every session up to a 10,000-session safety cap;
+if the cap is hit, a note at the end of the list says so.
+
 ## Keyboard
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` or arrows | Move active card |
+| `j` / `k` or arrows | Move the active session (the detail pane follows) |
 | `Enter` | Resume in Terminal |
 | `c` | Copy resume command (not ⌘C — system copy still works) |
 | `p` | Pin / unpin |
 | `u` | Open usage modal (when usage exists) |
 | `x` | Delete session (moves data to Trash, confirmed first) |
+| `m` / ⌘-click | Mark for bulk delete; `x` then deletes the marked set |
+| `Esc` | Clear marks; on narrow screens, close the detail pane |
 | `⌘K` / `Ctrl+K` | Command palette |
 
 ## Headless sessions
@@ -89,7 +105,7 @@ matches. `Headless Only` plus bulk delete clears them out.
 | Source | Signal |
 |--------|--------|
 | Claude Code | Every record's `entrypoint` is `sdk-*` (`sdk-cli` = `claude -p`); a later TUI turn makes it interactive |
-| Codex | `session_meta.originator` is `codex_exec`, `acpx` or `codex_cli_rs` |
+| Codex | `session_meta.originator` is `codex_exec`, `acpx` or `codex_cli_rs`, or `source` is a subagent (guardian approval reviews, spawned worker threads) |
 | Devin | No typed message carries `chisel/client-message-id`. Older Devin builds never wrote it, so only sessions newer than the earliest tagged one are flagged |
 | Copilot CLI | The system prompt in `session-state/<id>/events.jsonl` says "running in non-interactive mode" |
 | opencode | `opencode run` (`permission` denies `question`) or a subagent (`parent_id` set) |
@@ -98,7 +114,7 @@ matches. `Headless Only` plus bulk delete clears them out.
 
 ## Deleting sessions
 
-Every card has a trash button (and `x` on the active card) that asks for
+The trash button in the detail pane's header (or `x`) asks for
 confirmation, then removes the session **via `~/.Trash`** — file-backed
 sources (Claude, Codex, Pi, Grok) are moved wholesale; database-backed
 sources (Devin, Copilot, opencode) get a JSON dump of the session's rows
@@ -112,8 +128,12 @@ noise — for quick pruning.
 - `server.py` — thin entry point (`python3 server.py` / launchd).
 - `siv/` — stdlib-only backend on `127.0.0.1:7333`:
   - `GET /` serves the viewer.
-  - `GET /api/sessions?limit=1000` scans session files live, with an
-    mtime/size cache so only changed files are re-parsed.
+  - `GET /api/sessions` scans session files live, with an mtime/size
+    cache so only changed files are re-parsed. Rows omit the last reply
+    (`?fields=full` adds it back for the legacy viewer); a cut-short list
+    carries `X-Sessions-Truncated: 1`.
+  - `GET /api/session?source=&session_id=&page=` returns one page of a
+    session's conversation (`page=0` = newest page).
   - `POST /api/resume` opens a Terminal window with a validated
     `cd <cwd> && <tool> resume <id>` command. If the recorded cwd belongs
     to another machine, the home-dir prefix is remapped to this machine.
@@ -121,8 +141,8 @@ noise — for quick pruning.
     (`/Users/<name>/...` or `/home/<name>/...`).
   - Parsers: `siv/sources/` (`claude`, `codex`, `devin`, `grok`, `pi`,
     `copilot`, `opencode`).
-- `frontend/` — React card UI (search, source/host filters, pin, usage modal,
-  light/dark theme toggle).
+- `frontend/` — React two-pane UI (session list, conversation pane, search and
+  filters, pin, usage modal, light/dark theme toggle).
 - `sessions-index.html` — legacy single-file viewer (fallback if dist is missing).
 - `install.sh` — launchd plist + optional frontend build. Logs:
   `~/Library/Logs/session-index-viewer.log`.

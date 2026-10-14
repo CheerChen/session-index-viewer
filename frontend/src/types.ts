@@ -24,7 +24,6 @@ export interface Session {
   title: string;
   first_user: string;
   last_user: string;
-  last_assistant: string;
   resume_command: string;
   usage: SessionUsage | null;
   // Server sets this false when ~/.Trash is unavailable — the delete UI

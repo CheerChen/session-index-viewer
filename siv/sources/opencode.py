@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 from .. import cache
 from ..config import OPENCODE_DB
+from ..conversation import fold_turns, paginate
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import delete_db_session
 
@@ -199,6 +200,61 @@ def collect(limit):
     except sqlite3.Error:
         return []
     return entries
+
+
+def messages(session_id, page=1, page_size=50):
+    """Conversation from message rows and their text / reasoning / tool parts.
+
+    Synthetic text parts (editor-context reminders opencode injects) are
+    not part of what the person typed and are skipped.
+    """
+    if not os.path.isfile(OPENCODE_DB):
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{OPENCODE_DB}?mode=ro", uri=True)
+        try:
+            if not conn.execute(
+                "SELECT 1 FROM session WHERE id = ?", (session_id,)
+            ).fetchone():
+                return None
+            rows = conn.execute(
+                "SELECT m.id, json_extract(m.data, '$.role'), m.time_created, "
+                "  json_extract(p.data, '$.type'), json_extract(p.data, '$.text'), "
+                "  json_extract(p.data, '$.synthetic') "
+                "FROM message m LEFT JOIN part p ON p.message_id = m.id "
+                "WHERE m.session_id = ? "
+                "ORDER BY m.time_created, m.id, p.time_created, p.id",
+                (session_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+    def events():
+        current = None
+        for mid, role, created, ptype, text, synthetic in rows:
+            if current is None or current["id"] != mid:
+                if current:
+                    yield current
+                current = {
+                    "id": mid,
+                    "role": role,
+                    "content": "",
+                    "thinking": "",
+                    "tool_calls": 0,
+                    "created_at": _iso(created),
+                }
+            if ptype == "text" and text and not synthetic:
+                current["content"] += ("\n\n" if current["content"] else "") + text
+            elif ptype == "reasoning" and text:
+                current["thinking"] += ("\n\n" if current["thinking"] else "") + text
+            elif ptype == "tool":
+                current["tool_calls"] += 1
+        if current:
+            yield current
+
+    return paginate(fold_turns(events()), page, page_size)
 
 
 def delete_session(session_id):

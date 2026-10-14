@@ -16,6 +16,7 @@ import sqlite3
 
 from .. import cache
 from ..config import COPILOT_DB
+from ..conversation import fold_turns, paginate
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import delete_db_session
 
@@ -143,6 +144,39 @@ def collect(limit):
     except sqlite3.Error:
         return []
     return entries
+
+
+def messages(session_id, page=1, page_size=50):
+    """Conversation from the turns table (pre-formatted text per turn).
+
+    The table keeps no tool-call or reasoning detail, so replies carry
+    text only.
+    """
+    if not os.path.isfile(COPILOT_DB):
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{COPILOT_DB}?mode=ro", uri=True)
+        try:
+            if not conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone():
+                return None
+            rows = conn.execute(
+                "SELECT user_message, assistant_response, timestamp FROM turns "
+                "WHERE session_id = ? ORDER BY turn_index",
+                (session_id,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+
+    def events():
+        for user_message, assistant_response, ts in rows:
+            yield {"role": "user", "content": user_message or "", "created_at": ts}
+            yield {"role": "assistant", "content": assistant_response or "", "created_at": ts}
+
+    return paginate(fold_turns(events()), page, page_size)
 
 
 def delete_session(session_id):

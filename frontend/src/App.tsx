@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   OriginFilter,
   Session,
@@ -12,11 +12,11 @@ import { useTheme } from "./hooks/useTheme";
 import { sessionKey } from "./utils/format";
 import { postResume } from "./api";
 import { Toolbar } from "./components/Toolbar";
-import { SessionCard } from "./components/SessionCard";
-import { SkeletonCard } from "./components/SkeletonCard";
+import { ROW_HEIGHT, SessionRow } from "./components/SessionRow";
+import { SkeletonRow } from "./components/SkeletonRow";
+import { SessionDetail } from "./components/SessionDetail";
 import { CommandPalette } from "./components/CommandPalette";
 import { UsageModal } from "./components/UsageModal";
-import { SessionConversation } from "./components/SessionConversation";
 import { DeleteSessionModal } from "./components/DeleteSessionModal";
 import { BatchDeleteModal } from "./components/BatchDeleteModal";
 
@@ -84,7 +84,6 @@ function matchesRest(
     item.title,
     item.first_user,
     item.last_user,
-    item.last_assistant,
   ]
     .join("\n")
     .toLowerCase();
@@ -92,7 +91,7 @@ function matchesRest(
 }
 
 export default function App() {
-  const { sessions, error, loading, reload } = useSessions();
+  const { sessions, truncated, error, loading, reload } = useSessions();
   const { pinnedIds, toggle: togglePin, has: isPinned } = usePinned();
   const { theme, toggle: toggleTheme } = useTheme();
 
@@ -102,8 +101,9 @@ export default function App() {
   }));
   const [activeIdx, setActiveIdx] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Global conversation modal — single instance, same pattern as usage.
-  const [conversationSession, setConversationSession] = useState<Session | null>(null);
+  // Narrow screens stack the panes; the detail pane then opens as an
+  // overlay on row activation. Ignored by the wide layout.
+  const [detailOpen, setDetailOpen] = useState(false);
   const [deleteSession, setDeleteSession] = useState<Session | null>(null);
   // Multi-select for bulk delete — keyed by source|session_id so it
   // survives filtering, pinning reorders, and virtualization.
@@ -111,11 +111,9 @@ export default function App() {
   const [batchDelete, setBatchDelete] = useState<Session[] | null>(null);
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
-  const [showTop, setShowTop] = useState(false);
   const { query, source, turns, origin } = filter;
 
-  const boardRef = useRef<HTMLDivElement>(null);
-  const [scrollMargin, setScrollMargin] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -155,89 +153,46 @@ export default function App() {
   const safeActiveIdx =
     filtered.length === 0 ? 0 : Math.min(activeIdx, filtered.length - 1);
 
-  // Measure board's offset from the top of the document so the window
-  // virtualizer knows where the list starts (scrollMargin).
-  useEffect(() => {
-    const measure = () => {
-      if (boardRef.current) {
-        setScrollMargin(
-          boardRef.current.getBoundingClientRect().top + window.scrollY,
-        );
-      }
-    };
-    if (!loading) measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [loading]);
+  const activeSession = filtered[safeActiveIdx] ?? null;
+  // Host labels only earn row space when sessions come from more than
+  // one machine (synced histories).
+  const multiHost = useMemo(
+    () => new Set(sessions.map((s) => s.host)).size > 1,
+    [sessions],
+  );
 
-  // Show back-to-top button after scrolling past the hero.
-  useEffect(() => {
-    const onScroll = () => setShowTop(window.scrollY > 400);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const virtualizer = useWindowVirtualizer({
+  const virtualizer = useVirtualizer({
     count: filtered.length,
-    estimateSize: () => 300,
-    overscan: 6,
-    scrollMargin,
-    measureElement: (el) => el.getBoundingClientRect().height,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
     getItemKey: (index) => sessionKey(filtered[index]),
   });
 
   const scrollActiveIntoView = useCallback(
     (idx: number) => {
-      virtualizer.scrollToIndex(idx, { align: "center" });
+      virtualizer.scrollToIndex(idx, { align: "auto" });
     },
     [virtualizer],
   );
 
-  // Stable callbacks for SessionCard memo — pass index, look up item
+  // Stable callbacks for SessionRow memo — pass index, look up item
   // inside so the callback identity never changes across renders.
-  const handlePin = useCallback(
-    (idx: number) => {
-      const item = filtered[idx];
-      if (item) togglePin(item);
-    },
-    [filtered, togglePin],
-  );
   const handleActivate = useCallback((idx: number) => {
     setActiveIdx(idx);
+    setDetailOpen(true);
   }, []);
 
-  // Stable callback for the conversation chip in SessionCard — mirrors
-  // handleUsageOpen so the modal opens from any card position.
-  const handleConversationOpen = useCallback((session: Session) => {
-    setConversationSession(session);
-  }, []);
-  // Delete can start from the card list or from the conversation modal.
-  // Only the latter restores the modal on cancel; track which via
-  // deleteReturnTo.
-  const [deleteReturnTo, setDeleteReturnTo] = useState<Session | null>(null);
   const handleDeleteRequest = useCallback((session: Session) => {
-    if (!session.deletable) return;
-    setDeleteReturnTo(session);
-    setConversationSession(null);
-    setDeleteSession(session);
+    if (session.deletable) setDeleteSession(session);
   }, []);
-  const handleCardDeleteRequest = useCallback((session: Session) => {
-    if (!session.deletable) return;
-    setDeleteReturnTo(null);
-    setDeleteSession(session);
-  }, []);
-  const handleDeleteCancel = useCallback(() => {
-    if (deleteReturnTo) setConversationSession(deleteReturnTo);
-    setDeleteReturnTo(null);
-    setDeleteSession(null);
-  }, [deleteReturnTo]);
+  const handleDeleteCancel = useCallback(() => setDeleteSession(null), []);
   const handleDeleted = useCallback(() => {
-    setDeleteReturnTo(null);
     setDeleteSession(null);
     void reload();
   }, [reload]);
 
-  // Stable callback for usage chip clicks in SessionCard.
+  // Stable callback for the usage chip in the detail pane.
   const handleUsageOpen = useCallback((session: Session) => {
     setUsageSession(session);
   }, []);
@@ -302,14 +257,7 @@ export default function App() {
         return;
       }
 
-      if (
-        paletteOpen ||
-        deleteSession ||
-        batchDelete ||
-        usageSession ||
-        conversationSession
-      )
-        return;
+      if (paletteOpen || deleteSession || batchDelete || usageSession) return;
       // Leave Cmd/Ctrl/Alt combos to the browser (copy, paste, print…).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
@@ -339,10 +287,6 @@ export default function App() {
         e.preventDefault();
         const item = filtered[safeActiveIdx];
         if (item) togglePin(item);
-      } else if (e.key === "e") {
-        e.preventDefault();
-        const item = filtered[safeActiveIdx];
-        if (item?.source === "devin") setConversationSession(item);
       } else if (e.key === "u") {
         e.preventDefault();
         const item = filtered[safeActiveIdx];
@@ -356,14 +300,16 @@ export default function App() {
           openBatchDelete();
         } else {
           const item = filtered[safeActiveIdx];
-          if (item?.deletable) {
-            setDeleteReturnTo(null);
-            setDeleteSession(item);
-          }
+          if (item?.deletable) setDeleteSession(item);
         }
-      } else if (e.key === "Escape" && selected.size > 0) {
-        e.preventDefault();
-        clearSelection();
+      } else if (e.key === "Escape") {
+        if (selected.size > 0) {
+          e.preventDefault();
+          clearSelection();
+        } else if (detailOpen) {
+          e.preventDefault();
+          setDetailOpen(false);
+        }
       }
     };
     document.addEventListener("keydown", handler);
@@ -375,7 +321,7 @@ export default function App() {
     deleteSession,
     batchDelete,
     usageSession,
-    conversationSession,
+    detailOpen,
     selected,
     togglePin,
     scrollActiveIntoView,
@@ -468,84 +414,107 @@ export default function App() {
         />
       </section>
 
-      <section ref={boardRef} className="board" aria-live="polite">
-        {loading && (
-          <div className="skeleton-list" aria-busy="true" aria-live="polite">
-            <span className="sr-only">Loading sessions…</span>
-            {Array.from({ length: 6 }, (_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
-        )}
-        {error && (
-          <div className="empty">
-            Failed to load /api/sessions. Is server.py running?
-          </div>
-        )}
-        {!loading && !error && filtered.length === 0 && (
-          <div className="empty">
-            No matching sessions. Try a different query.
-            {hiddenByOrigin > 0 && (
-              <>
-                {" "}
-                <button
-                  type="button"
-                  className="empty-action"
-                  onClick={() => setOrigin("all")}
-                >
-                  Show {hiddenByOrigin}{" "}
-                  {origin === "interactive" ? "headless" : "interactive"}{" "}
-                  {hiddenByOrigin === 1 ? "match" : "matches"}
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        {!loading && !error && filtered.length > 0 && (
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              position: "relative",
-            }}
-          >
-            {virtualizer.getVirtualItems().map((vi) => {
-              const item = filtered[vi.index];
-              return (
-                <div
-                  key={sessionKey(item)}
-                  data-index={vi.index}
-                  ref={virtualizer.measureElement}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${vi.start - scrollMargin}px)`,
-                    zIndex: vi.index === safeActiveIdx ? 10 : undefined,
-                  }}
-                >
-                  <div style={{ marginBottom: "18px" }}>
-                    <SessionCard
+      <div className="workspace">
+        <section
+          ref={listRef}
+          className="list-pane"
+          role="listbox"
+          aria-label="Sessions"
+          aria-live="polite"
+        >
+          {loading && (
+            <div aria-busy="true">
+              <span className="sr-only">Loading sessions…</span>
+              {Array.from({ length: 10 }, (_, i) => (
+                <SkeletonRow key={i} />
+              ))}
+            </div>
+          )}
+          {error && (
+            <div className="empty">
+              Failed to load /api/sessions. Is server.py running?
+            </div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="empty">
+              No matching sessions. Try a different query.
+              {hiddenByOrigin > 0 && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="empty-action"
+                    onClick={() => setOrigin("all")}
+                  >
+                    Show {hiddenByOrigin}{" "}
+                    {origin === "interactive" ? "headless" : "interactive"}{" "}
+                    {hiddenByOrigin === 1 ? "match" : "matches"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {!loading && !error && filtered.length > 0 && (
+            <div
+              style={{
+                height: `${virtualizer.getTotalSize()}px`,
+                position: "relative",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((vi) => {
+                const item = filtered[vi.index];
+                return (
+                  <div
+                    key={vi.key}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${ROW_HEIGHT}px`,
+                      transform: `translateY(${vi.start}px)`,
+                    }}
+                  >
+                    <SessionRow
                       session={item}
                       index={vi.index}
                       active={vi.index === safeActiveIdx}
                       pinned={isPinned(item)}
+                      lastPinned={
+                        isPinned(item) &&
+                        !!filtered[vi.index + 1] &&
+                        !isPinned(filtered[vi.index + 1])
+                      }
                       selected={selected.has(sessionKey(item))}
+                      showHost={multiHost}
                       queryText={queryText}
-                      onPin={handlePin}
                       onActivate={handleActivate}
-                      onConversationOpen={handleConversationOpen}
-                      onUsageOpen={handleUsageOpen}
-                      onDeleteRequest={handleCardDeleteRequest}
                       onToggleSelect={handleToggleSelect}
                     />
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                );
+              })}
+            </div>
+          )}
+          {truncated && (
+            <div className="list-notice" role="status">
+              Showing the newest {sessions.length} sessions; older ones are
+              not loaded.
+            </div>
+          )}
+        </section>
+
+        <section className={`detail-pane ${detailOpen ? "is-open" : ""}`}>
+          <SessionDetail
+            session={activeSession}
+            pinned={activeSession ? isPinned(activeSession) : false}
+            onPin={togglePin}
+            onUsageOpen={handleUsageOpen}
+            onDeleteRequest={handleDeleteRequest}
+            onClose={() => setDetailOpen(false)}
+          />
+        </section>
+      </div>
 
       {paletteOpen && (
         <CommandPalette
@@ -559,14 +528,6 @@ export default function App() {
         <UsageModal
           session={usageSession}
           onClose={() => setUsageSession(null)}
-        />
-      )}
-
-      {conversationSession && (
-        <SessionConversation
-          session={conversationSession}
-          onClose={() => setConversationSession(null)}
-          onDeleteRequest={handleDeleteRequest}
         />
       )}
 
@@ -590,7 +551,7 @@ export default function App() {
         <div className="selection-bar" role="toolbar" aria-label="Selection">
           <span
             className="selection-count"
-            title="m or ⌘click toggles a card · Esc clears"
+            title="m or ⌘click toggles a row · Esc clears"
           >
             {selected.size} selected
           </span>
@@ -608,17 +569,6 @@ export default function App() {
             Clear
           </button>
         </div>
-      )}
-
-      {showTop && (
-        <button
-          className="back-to-top"
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          aria-label="Back to top"
-        >
-          ↑
-        </button>
       )}
     </main>
   );

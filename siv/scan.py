@@ -12,7 +12,13 @@ from .sources.jsonl_files import cached_entry
 from .trash import trash_available
 
 
-def scan_sessions(limit):
+def scan_sessions(limit, full=False):
+    """Return (sessions, truncated) — the newest `limit` across all sources.
+
+    truncated is True when any source had more candidates than `limit`.
+    The list omits last_assistant (the detail pane loads the conversation)
+    unless `full` is set, for the legacy single-file viewer.
+    """
     # Claude + Codex + Pi share one mtime-ranked candidate list so a flood
     # of files from one tool cannot starve the others within `limit`.
     candidates = []
@@ -30,6 +36,7 @@ def scan_sessions(limit):
         except OSError:
             continue
     stats.sort(reverse=True)
+    truncated = len(stats) > limit
 
     with cache.lock():
         items = []
@@ -48,7 +55,9 @@ def scan_sessions(limit):
         # straight from the SQLite database (message_nodes table). Kept
         # separate from the glob path because the candidate list comes
         # from a DB query, not a filesystem glob.
-        for entry in devin.collect(limit):
+        collected = devin.collect(limit)
+        truncated = truncated or len(collected) >= limit
+        for entry in collected:
             key = f"devin|{entry['session_id']}"
             if key in seen:
                 continue
@@ -56,7 +65,9 @@ def scan_sessions(limit):
             items.append(entry)
 
         # Grok CLI: per-session directories under ~/.grok/sessions.
-        for entry in grok.collect(limit):
+        collected = grok.collect(limit)
+        truncated = truncated or len(collected) >= limit
+        for entry in collected:
             key = f"grok|{entry['session_id']}"
             if key in seen:
                 continue
@@ -64,7 +75,9 @@ def scan_sessions(limit):
             items.append(entry)
 
         # Copilot CLI: relational SQLite store (~/.copilot/session-store.db).
-        for entry in copilot.collect(limit):
+        collected = copilot.collect(limit)
+        truncated = truncated or len(collected) >= limit
+        for entry in collected:
             key = f"copilot|{entry['session_id']}"
             if key in seen:
                 continue
@@ -72,7 +85,9 @@ def scan_sessions(limit):
             items.append(entry)
 
         # opencode: single SQLite store with message/part tables.
-        for entry in opencode.collect(limit):
+        collected = opencode.collect(limit)
+        truncated = truncated or len(collected) >= limit
+        for entry in collected:
             key = f"opencode|{entry['session_id']}"
             if key in seen:
                 continue
@@ -80,9 +95,10 @@ def scan_sessions(limit):
             items.append(entry)
 
     items.sort(key=lambda e: e["sort_ts"], reverse=True)
+    truncated = truncated or len(items) > limit
     items = items[:limit]
     deletable = trash_available()
-    return [
+    sessions = [
         {
             "source": e["source"],
             "host": host_for(e["cwd"]),
@@ -92,7 +108,6 @@ def scan_sessions(limit):
             "title": e["title"],
             "first_user": e["first_user"],
             "last_user": e["last_user"],
-            "last_assistant": e["last_assistant"],
             "resume_command": resume_command(e["source"], e["session_id"], e["cwd"]),
             "usage": e.get("usage"),
             "deletable": deletable,
@@ -101,3 +116,7 @@ def scan_sessions(limit):
         }
         for e in items
     ]
+    if full:
+        for out, e in zip(sessions, items):
+            out["last_assistant"] = e["last_assistant"]
+    return sessions, truncated

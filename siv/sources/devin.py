@@ -1,7 +1,6 @@
 """Devin CLI sessions from the local SQLite database."""
 
 import json
-import math
 import os
 import shutil
 import sqlite3
@@ -10,6 +9,7 @@ from datetime import datetime, timezone
 
 from .. import cache
 from ..config import DEVIN_DB
+from ..conversation import fold_turns, paginate
 from ..text import clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import dump_db_session, dump_to_trash
 
@@ -220,60 +220,27 @@ def _flag_headless(entries, tagged_by_sid, created_by_sid):
         entry["headless"] = headless
 
 
-def _message_out(node_id, m):
-    """Project one message_nodes row into the API response shape."""
-    out = {
-        "node_id": node_id,
-        "role": m.get("role", ""),
-        "content": m.get("content", "") or "",
-    }
-    metadata = m.get("metadata") or {}
-    if metadata.get("created_at"):
-        out["created_at"] = metadata["created_at"]
-    thinking = m.get("thinking")
-    if isinstance(thinking, dict):
-        text = thinking.get("thinking")
-        if text:
-            out["thinking"] = text
-    return out
-
-
-def _has_reply(message):
-    content = message.get("content")
-    return isinstance(content, str) and bool(content.strip())
-
-
-def _conversation_messages(rows):
-    messages = []
-    assistant = None
+def _events(rows):
+    """message_nodes rows (active chain, oldest first) as conversation events."""
     for node_id, raw in rows:
         try:
-            parsed = json.loads(raw)
+            m = json.loads(raw)
         except ValueError:
             continue
-        if not isinstance(parsed, dict):
+        if not isinstance(m, dict):
             continue
-        message = _message_out(node_id, parsed)
-        if message["role"] == "user":
-            if assistant and _has_reply(assistant):
-                messages.append(assistant)
-            assistant = None
-            messages.append(message)
-            continue
-        calls = parsed.get("tool_calls")
-        tool_call_count = len(calls) if isinstance(calls, list) else 0
-        if assistant is None:
-            assistant = message
-            assistant["tool_call_count"] = tool_call_count
-            continue
-        assistant["node_id"] = message["node_id"]
-        for key in ("created_at", "content", "thinking"):
-            if message.get(key):
-                assistant[key] = message[key]
-        assistant["tool_call_count"] += tool_call_count
-    if assistant and _has_reply(assistant):
-        messages.append(assistant)
-    return messages
+        thinking = m.get("thinking")
+        calls = m.get("tool_calls")
+        yield {
+            "node_id": node_id,
+            "role": m.get("role", ""),
+            "content": m.get("content", "") or "",
+            "created_at": (m.get("metadata") or {}).get("created_at") or "",
+            "thinking": (thinking.get("thinking") or "")
+            if isinstance(thinking, dict)
+            else "",
+            "tool_calls": len(calls) if isinstance(calls, list) else 0,
+        }
 
 
 def messages(session_id, page=1, page_size=50):
@@ -315,16 +282,7 @@ def messages(session_id, page=1, page_size=50):
     except sqlite3.Error:
         return None
 
-    all_messages = _conversation_messages(rows)
-    total = len(all_messages)
-    offset = (page - 1) * page_size
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "pages": math.ceil(total / page_size) if total else 1,
-        "messages": all_messages[offset : offset + page_size],
-    }
+    return paginate(fold_turns(_events(rows)), page, page_size)
 
 
 def _executable():

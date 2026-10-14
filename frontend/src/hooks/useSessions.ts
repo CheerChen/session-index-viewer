@@ -7,13 +7,15 @@ import type { Session } from "../types";
 // CLI then switching back to the viewer.
 export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const data = await fetchSessions();
-      setSessions(data);
+      setSessions(data.sessions);
+      setTruncated(data.truncated);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -34,5 +36,5 @@ export function useSessions() {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [load]);
 
-  return { sessions, error, loading, reload: load };
+  return { sessions, truncated, error, loading, reload: load };
 }

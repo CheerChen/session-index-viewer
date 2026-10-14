@@ -2,6 +2,35 @@
 
 ## 2026-10-14
 
+### Two-pane layout
+- **List + detail replace the card stack.** Sessions are compact rows
+  (title, source, headless flag, project, turns, age); the active one
+  opens in a right-hand pane with its actions, usage and conversation.
+  `j`/`k` drive both, with a short debounce and a client cache so
+  sweeping the list doesn't refetch. The pane opens on the newest page
+  and loads earlier pages in place without jumping. Under 900px the
+  pane slides over the list. The conversation modal (Devin only, `e`)
+  is gone.
+- **Pinning reads as pinning.** The star is now a pushpin (outline /
+  filled), pinned rows carry a pin glyph and a faint wash, and a heavier
+  rule closes the pinned group. Delete is an icon-only trash button.
+- **Conversations for every source.** `/api/session` now reads Claude,
+  Codex, Pi, Grok, Copilot and opencode as well as Devin, through one
+  shared projection: user turns plus one folded reply per turn, tool
+  calls counted. Turns that only ran tools (e.g. aborted) are kept so
+  the count stays visible. `page=0` returns the newest page.
+- **Lighter list, no silent cut-off.** `/api/sessions` drops
+  `last_assistant` (about 60% of the payload; ~2.4 MB → ~1.1 MB here)
+  and search no longer covers replies. The 1,000-session cap that
+  silently hid the oldest sessions is now a 10,000 safety cap reported
+  via `X-Sessions-Truncated` and a note at the end of the list.
+- **Codex prompts and subagents.** `codex_vscode` prompts are unwrapped
+  from their IDE-context preamble, AGENTS.md and guardian-review
+  injections no longer pose as the opening prompt, and Codex subagent
+  sessions (guardian reviews, spawned threads) are flagged headless.
+- Session files are always read whole; the head+tail window was always
+  followed by a full re-read anyway.
+
 ### Headless sessions
 - **Every source except Pi now flags headless sessions**, not just
   Codex. The verdict is made per source adapter (`headless` on each

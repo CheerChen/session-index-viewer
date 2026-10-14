@@ -3,10 +3,12 @@
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .. import cache
 from ..config import SESSION_ID_RE
+from ..conversation import cached, fold_turns, paginate
+from ..io_util import read_records
 from ..text import blocks_text, clean_inline, clean_multiline, clip, usable_user_text
 from ..trash import move_to_trash
 
@@ -317,13 +319,13 @@ def collect(limit):
     return entries
 
 
-def delete_session(session_id):
-    """Trash the whole session directory sessions/<cwd>/<id>/."""
+def _session_dir(session_id):
+    """sessions/<cwd>/<id>/ for this id, or None."""
     root = sessions_root()
     try:
         groups = os.listdir(root)
     except OSError:
-        return {"ok": False, "error": "Session not found."}, 404
+        return None
     for group in groups:
         session_dir = os.path.join(root, group, session_id)
         summary_path = os.path.join(session_dir, "summary.json")
@@ -338,13 +340,115 @@ def delete_session(session_id):
             info = {}
         if info.get("id") and info["id"] != session_id:
             continue
-        try:
-            move_to_trash(session_dir)
-        except OSError:
-            return {
-                "ok": False,
-                "error": "Could not move session to Trash.",
-            }, 500
-        cache.delete(f"grok:{session_dir}")
-        return {"ok": True}, 200
-    return {"ok": False, "error": "Session not found."}, 404
+        return session_dir
+    return None
+
+
+def _iso_seconds(ts):
+    try:
+        return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
+        return ""
+
+
+def _update_events(records):
+    """ACP session/update stream as conversation events.
+
+    Replies and thoughts arrive as many small chunks; consecutive chunks
+    of one kind are joined. A user prompt can be re-emitted verbatim
+    (e.g. on retry), so a repeat of the previous prompt is dropped.
+    """
+    last_user = None
+    for record in records:
+        update = (record.get("params") or {}).get("update") or {}
+        kind = update.get("sessionUpdate")
+        content = update.get("content") or {}
+        text = content.get("text", "") if isinstance(content, dict) else ""
+        ts = _iso_seconds(record.get("timestamp"))
+        if kind == "user_message_chunk":
+            if text and text != last_user:
+                last_user = text
+                yield {"role": "user", "content": text, "created_at": ts}
+        elif kind == "agent_message_chunk":
+            yield {"role": "assistant", "chunk": text, "created_at": ts}
+        elif kind == "agent_thought_chunk":
+            yield {"role": "assistant", "thought": text}
+        elif kind == "tool_call":
+            yield {"role": "assistant", "tool_calls": 1}
+            # Text after a tool call starts a new reply segment.
+            yield {"role": "assistant", "break": True}
+
+
+def _join_chunks(events):
+    """Fold chunk/thought pieces into whole content/thinking values."""
+    reply, thought = [], []
+    for event in events:
+        if event["role"] == "user":
+            reply, thought = [], []
+            yield event
+            continue
+        if event.get("break"):
+            reply = []
+            continue
+        if "chunk" in event:
+            reply.append(event["chunk"])
+            yield {
+                "role": "assistant",
+                "content": "".join(reply),
+                "created_at": event.get("created_at", ""),
+            }
+        elif "thought" in event:
+            thought.append(event["thought"])
+            yield {"role": "assistant", "thinking": "".join(thought)}
+        else:
+            yield event
+
+
+def _chat_history_events(records):
+    for record in records:
+        rtype = record.get("type")
+        if rtype == "user" and not record.get("synthetic_reason"):
+            yield {"role": "user", "content": user_text_from_content(record.get("content"))}
+        elif rtype == "assistant":
+            yield {"role": "assistant", "content": blocks_text(record.get("content"))}
+
+
+def messages(session_id, page=1, page_size=50):
+    session_dir = _session_dir(session_id)
+    if session_dir is None:
+        return None
+    updates_path = os.path.join(session_dir, "updates.jsonl")
+    chat_path = os.path.join(session_dir, "chat_history.jsonl")
+    path = updates_path if os.path.isfile(updates_path) else chat_path
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+
+    def build():
+        records = read_records(path)
+        if path == updates_path:
+            return fold_turns(_join_chunks(_update_events(records)))
+        return fold_turns(_chat_history_events(records))
+
+    try:
+        all_messages = cached((path, st.st_mtime_ns, st.st_size), build)
+    except OSError:
+        return None
+    return paginate(all_messages, page, page_size)
+
+
+def delete_session(session_id):
+    """Trash the whole session directory sessions/<cwd>/<id>/."""
+    session_dir = _session_dir(session_id)
+    if session_dir is None:
+        return {"ok": False, "error": "Session not found."}, 404
+    try:
+        move_to_trash(session_dir)
+    except OSError:
+        return {
+            "ok": False,
+            "error": "Could not move session to Trash.",
+        }, 500
+    cache.delete(f"grok:{session_dir}")
+    return {"ok": True}, 200

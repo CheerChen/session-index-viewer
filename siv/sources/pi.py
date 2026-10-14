@@ -16,7 +16,7 @@ from datetime import datetime
 
 from ..config import PI_GLOB
 from ..text import usable_user_text
-from .jsonl_files import collect_jsonl, delete_file_session
+from .jsonl_files import collect_jsonl, delete_file_session, file_messages
 
 
 def _text_blocks(content):
@@ -145,11 +145,46 @@ def collect(limit):
     return collect_jsonl(PI_GLOB, "pi", parse_pi, limit)
 
 
+def _session_id(record):
+    if record.get("type") != "session":
+        return ""
+    return record.get("id") or ""
+
+
+def _events(records):
+    """user / assistant message records; toolResult rows are skipped."""
+    for record in records:
+        if record.get("type") != "message":
+            continue
+        msg = record.get("message") or {}
+        role = msg.get("role")
+        content = msg.get("content")
+        ts = record.get("timestamp") or ""
+        if role == "user":
+            yield {"role": "user", "content": _text_blocks(content), "created_at": ts}
+        elif role == "assistant":
+            blocks = content if isinstance(content, list) else []
+            yield {
+                "role": "assistant",
+                "content": _text_blocks(content),
+                "thinking": "\n".join(
+                    b.get("thinking", "")
+                    for b in blocks
+                    if isinstance(b, dict) and b.get("type") == "thinking"
+                ).strip(),
+                "tool_calls": sum(
+                    1
+                    for b in blocks
+                    if isinstance(b, dict) and b.get("type") == "toolCall"
+                ),
+                "created_at": ts,
+            }
+
+
+def messages(session_id, page=1, page_size=50):
+    return file_messages(PI_GLOB, session_id, _session_id, _events, page, page_size)
+
+
 def delete_session(session_id):
     """Trash the .jsonl whose session meta record carries this id."""
-    def extract(record):
-        if record.get("type") != "session":
-            return ""
-        return record.get("id") or ""
-
-    return delete_file_session(PI_GLOB, session_id, extract)
+    return delete_file_session(PI_GLOB, session_id, _session_id)

@@ -162,12 +162,21 @@
           linear-gradient(180deg, var(--bg) 0%, var(--body-grad-3-a) 42%, var(--body-grad-3-b) 100%);
       }
 
+      /* App shell: header on top, two panes filling the rest of the
+         viewport. The page itself never scrolls; each pane does. */
       .shell {
-        width: min(1240px, calc(100vw - 32px));
-        margin: 24px auto 48px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: min(1680px, calc(100vw - 32px));
+        height: 100dvh;
+        margin: 0 auto;
+        padding: 16px 0;
+        box-sizing: border-box;
       }
 
       .hero {
+        flex-shrink: 0;
         position: relative;
         overflow: hidden;
         padding: 18px 28px 20px;
@@ -308,44 +317,6 @@
         display: none;
       }
 
-      .board {
-        margin-top: 24px;
-      }
-
-      .card {
-        position: relative;
-        display: grid;
-        grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
-        gap: 22px;
-        padding: 24px;
-        border: 1px solid var(--line);
-        border-radius: 24px;
-        background: var(--panel-strong);
-        box-shadow: var(--shadow-card);
-      }
-
-      .card-side {
-        display: grid;
-        align-content: start;
-        gap: 18px;
-        min-width: 0;
-        max-width: 100%;
-        /* Grid items default min-width:auto expands past the 320px track
-           when mono command/usage strings are long — force the column. */
-        overflow: hidden;
-      }
-
-      .card-main {
-        min-width: 0;
-      }
-
-      .card-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
       /* Agent identity chip. Filled with the agent accent so it carries
          the semantic on its own — no more edge bar duplicating the same
          signal. Inline .source-pill sets color:accent via style prop; we
@@ -377,8 +348,8 @@
       }
 
       /* Marks sessions started by automation (-p / exec runs, ACP / MCP
-         drivers, subagents) rather than a person at the keyboard. Filled warning tint so it
-         reads at a glance next to the source pill. */
+         drivers, subagents) rather than a person at the keyboard. Filled
+         warning tint so it reads at a glance next to the source pill. */
       .headless-pill {
         display: inline-flex;
         align-items: center;
@@ -404,131 +375,306 @@
         flex-wrap: wrap;
       }
 
-      .card-title {
-        margin: 0 0 14px;
+      .workspace {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      .list-pane,
+      .detail-pane {
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel-strong);
+        box-shadow: var(--shadow-card);
+      }
+
+      .list-pane {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
+      .detail-pane {
+        overflow: hidden;
+      }
+
+      /* One session per row: title, then a single line of metadata.
+         Height must match ROW_HEIGHT in SessionRow.tsx. */
+      .row {
+        display: grid;
+        align-content: center;
+        gap: 6px;
+        height: 68px;
+        padding: 0 16px 0 13px;
+        border-bottom: 1px solid var(--line);
+        border-left: 3px solid transparent;
+        box-sizing: border-box;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        .row:hover {
+          background: var(--surface-tint);
+        }
+      }
+
+      .row.is-active,
+      .row.is-pinned.is-active {
+        border-left-color: var(--accent, var(--codex));
+        background: color-mix(
+          in oklch,
+          var(--accent, var(--codex)) 10%,
+          var(--panel-strong)
+        );
+      }
+
+      /* Bulk-delete selection: accent wash plus a dashed edge so it reads
+         differently from the active row. */
+      .row.is-selected {
+        border-left: 3px dashed var(--accent, var(--claude));
+        background: color-mix(
+          in oklch,
+          var(--accent, var(--claude)) 16%,
+          var(--panel-strong)
+        );
+      }
+
+      .row-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        overflow: hidden;
+        font-size: 14.5px;
+        font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .row-meta {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+        color: var(--muted);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 11.5px;
+        white-space: nowrap;
+      }
+
+      .row-source,
+      .row-headless {
+        flex-shrink: 0;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .row-source {
+        color: var(--accent, var(--codex));
+      }
+
+      .row-headless {
+        color: var(--usage-pressure-mid);
+      }
+
+      .row-project {
+        overflow: hidden;
+        min-width: 0;
+        text-overflow: ellipsis;
+      }
+
+      .row-host,
+      .row-turns {
+        flex-shrink: 0;
+      }
+
+      .row-time {
+        flex-shrink: 0;
+        margin-left: auto;
+      }
+
+      .row-title > span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Pinned rows: pin glyph before the title, a faint neutral wash, and
+         a heavier rule under the group so the pinned block reads as one.
+         Neutral on purpose: amber already means headless and the accent
+         varies per source. */
+      .row-pin {
+        display: inline-flex;
+        flex-shrink: 0;
+        color: var(--text);
+      }
+
+      .row.is-pinned {
+        background: color-mix(in oklch, var(--text) 6%, var(--panel-strong));
+      }
+
+      .row.is-last-pinned {
+        border-bottom: 2px solid color-mix(in oklch, var(--text) 35%, var(--line));
+      }
+
+      .list-notice {
+        padding: 14px 16px;
+        color: var(--muted);
+        font-size: 12.5px;
+        text-align: center;
+      }
+
+      .row-skeleton {
+        cursor: default;
+      }
+
+      .detail {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .detail-empty {
+        padding: 44px 24px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .detail-head {
+        flex-shrink: 0;
+        padding: 18px 24px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .detail-head-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .detail-head-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+      }
+
+      /* Only the narrow overlay needs a way back to the list. */
+      .detail-back {
+        display: none;
+      }
+
+      .detail-title {
+        display: -webkit-box;
+        margin: 12px 0 10px;
+        overflow: hidden;
         font-size: 20px;
         line-height: 1.3;
         letter-spacing: -0.01em;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
       }
 
-      .timestamp {
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.4;
-        text-align: right;
-      }
-
-      .meta {
+      .detail-meta {
         display: grid;
-        gap: 14px;
+        gap: 4px;
+        margin: 0;
+        font-size: 12.5px;
+      }
+
+      .detail-meta > div {
+        display: flex;
+        gap: 10px;
         min-width: 0;
-        max-width: 100%;
       }
 
-      .meta-row {
-        display: grid;
-        gap: 6px;
-        position: relative;
-        min-width: 0;
-        max-width: 100%;
-      }
-
-      .meta-row[data-tooltip]:hover::after {
-        content: attr(data-tooltip);
-        position: absolute;
-        left: 0;
-        bottom: 100%;
-        margin-bottom: 6px;
-        z-index: 20;
-        padding: 6px 10px;
-        max-width: 480px;
-        border-radius: 8px;
-        background: var(--tooltip-bg);
-        color: var(--tooltip-text);
-        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-        font-size: 11px;
-        letter-spacing: 0;
-        text-transform: none;
-        line-height: 1.45;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        pointer-events: none;
-        box-shadow: var(--shadow-tooltip);
-      }
-
-      .meta-row[data-tooltip][data-tooltip-multiline]:hover::after {
-        white-space: pre-line;
-        max-width: 280px;
-        text-overflow: clip;
-      }
-
-      .meta-label {
-        font-size: 11px;
+      .detail-meta dt {
+        flex-shrink: 0;
+        width: 64px;
         color: var(--muted);
+        font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
-      .meta-value {
-        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-        font-size: 12px;
-        line-height: 1.5;
+      .detail-meta dd {
+        margin: 0;
+        overflow: hidden;
         color: var(--text-meta);
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
         white-space: nowrap;
-        min-width: 0;
+        text-overflow: ellipsis;
       }
 
-      .command-frame {
+      .detail-actions {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 4px;
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        padding: 6px 6px 6px 10px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--surface-tint-2);
-        overflow: hidden;
-        box-sizing: border-box;
+        gap: 10px;
+        margin-top: 14px;
       }
 
-      .command-frame .meta-value {
-        flex: 1 1 0;
-        min-width: 0;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .detail-actions .usage-chip {
+        width: auto;
       }
 
-      .meta-icon {
-        flex-shrink: 0;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1;
-        padding: 4px 6px;
-        border-radius: 6px;
-        transition:
-          background 140ms ease,
-          color 140ms ease,
-          transform 140ms var(--ease-out);
+      .detail-body {
+        flex: 1;
+        min-height: 0;
+        padding: 20px 24px 28px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
-      .meta-icon:active {
-        transform: scale(0.97);
+      .conv-earlier {
+        justify-self: center;
       }
 
-      @media (hover: hover) and (pointer: fine) {
-        .meta-icon:hover {
-          background: var(--hover-overlay);
-          color: var(--text);
+      /* Narrow screens: list only; the detail pane slides over it. */
+      @media (max-width: 900px) {
+        .workspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .detail-pane {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          border-radius: 0;
+          transform: translateX(100%);
+          visibility: hidden;
+          transition:
+            transform 220ms var(--ease-out),
+            visibility 0s 220ms;
+        }
+
+        .detail-pane.is-open {
+          transform: none;
+          visibility: visible;
+          transition: transform 220ms var(--ease-out);
+        }
+
+        .detail-back {
+          display: inline-flex;
+          border: 0;
+          padding: 4px 6px;
+          background: transparent;
+          color: var(--muted);
+          font: inherit;
+          font-size: 13px;
+          cursor: pointer;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .detail-pane,
+        .detail-pane.is-open {
+          transition: none;
         }
       }
 
@@ -1013,48 +1159,6 @@
         }
       }
 
-      .resume-actions {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .resume-actions .toggle-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .resume-actions .toggle-button svg {
-        flex-shrink: 0;
-      }
-
-      .sections {
-        display: grid;
-        gap: 14px;
-      }
-
-      .section {
-        padding: 14px;
-        border-radius: 18px;
-        background: var(--surface-section);
-      }
-
-      .section-title {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 8px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      .section-title svg {
-        flex-shrink: 0;
-      }
-
       .section-body {
         margin: 0;
         font-size: 15px;
@@ -1194,106 +1298,10 @@
         vertical-align: top;
       }
 
-      .assistant-body {
-        position: relative;
-        max-height: 260px;
-        overflow: hidden;
-      }
-
-      .assistant-body.is-collapsed::after {
-        content: "";
-        position: absolute;
-        inset: auto 0 0 0;
-        height: 72px;
-        background: linear-gradient(180deg, rgba(255, 250, 241, 0), var(--assistant-fade));
-        pointer-events: none;
-      }
-
-      .assistant-body.is-expanded {
-        max-height: none;
-        overflow: visible;
-      }
-
-      .section-actions {
-        display: flex;
-        justify-content: flex-start;
-        margin-top: 10px;
-      }
-
-      .section-actions[hidden] {
-        display: none;
-      }
-
-      /* Full-conversation modal (devin). Rendered as a dialog so the
-         virtualized card list never hosts the conversation DOM; the
-         conversation itself sits in a scrollable panel. */
-      .conv-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        z-index: 80;
-        display: grid;
-        place-items: center;
-        padding: 24px 16px;
-        background: var(--backdrop);
-        backdrop-filter: blur(2px);
-        opacity: 0;
-        transition: opacity 200ms var(--ease-out);
-      }
-
-      .conv-modal-backdrop.is-entered {
-        opacity: 1;
-      }
-
-      .conv-modal {
-        width: min(920px, 100%);
-        max-height: min(88vh, 900px);
-        overflow: auto;
-        padding: 22px 24px 18px;
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background: var(--panel-strong);
-        box-shadow: var(--shadow-modal);
-        color: var(--text);
-        opacity: 0;
-        transform: scale(0.96);
-        transition:
-          opacity 220ms var(--ease-out),
-          transform 220ms var(--ease-out);
-        outline: none;
-      }
-
-      .conv-modal.is-entered {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .conv-modal-backdrop,
-        .conv-modal {
-          transition: none !important;
-        }
-
-        .conv-modal {
-          transform: none;
-        }
-      }
-
-      .conv-modal-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 16px;
-      }
-
-      .conv-modal-head-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-      }
-
       .delete-session-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
         border: 0;
         border-radius: 8px;
         padding: 6px 8px;
@@ -1310,98 +1318,6 @@
       .delete-session-trigger:hover {
         background: color-mix(in oklch, var(--usage-pressure-high) 10%, transparent);
         color: var(--usage-pressure-high);
-      }
-
-      .conv-modal-head-text {
-        min-width: 0;
-        flex: 1 1 auto;
-      }
-
-      .conv-modal-eyebrow {
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 4px;
-      }
-
-      .conv-modal-title {
-        margin: 0 0 10px;
-        font-size: 18px;
-        line-height: 1.3;
-        letter-spacing: -0.01em;
-      }
-
-      .conv-modal-title-text {
-        display: block;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .conv-modal-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-      }
-
-      .conv-modal-session {
-        display: inline-flex;
-        align-items: center;
-        max-width: 100%;
-        padding: 6px 11px;
-        border-radius: 999px;
-        background: var(--chip);
-        color: var(--text-muted-2);
-        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .conv-modal-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 16px;
-        padding-top: 14px;
-        border-top: 1px solid var(--line);
-      }
-
-      .conv-count {
-        font-size: 12px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      .conv-pager {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .conv-pager .toggle-button {
-        padding: 6px 12px;
-        font-size: 12px;
-      }
-
-      .conv-pager .toggle-button:disabled {
-        opacity: 0.4;
-        cursor: default;
-      }
-
-      .conv-page {
-        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-        font-size: 12px;
-        color: var(--text-meta);
       }
 
       .conv-list {
@@ -1677,22 +1593,6 @@
         color: var(--muted);
       }
 
-      /* Bulk-delete selection state — the card itself is the
-         affordance (accent-tinted border + faint accent wash), no
-         checkbox widget. */
-      .card.is-selected {
-        border-color: color-mix(
-          in oklch,
-          var(--accent, var(--claude)) 60%,
-          var(--line)
-        );
-        background: color-mix(
-          in oklch,
-          var(--accent, var(--claude)) 7%,
-          var(--panel-strong)
-        );
-      }
-
       /* Floating bulk-action bar — bottom-center so it never fights
          the back-to-top button in the corner. */
       .selection-bar {
@@ -1822,15 +1722,6 @@
         border: 0;
       }
 
-      .skeleton-list {
-        display: grid;
-        gap: 18px;
-      }
-
-      .card-skeleton {
-        pointer-events: none;
-      }
-
       .sk-line {
         display: block;
         border-radius: 8px;
@@ -1844,41 +1735,13 @@
         animation: sk-shimmer 1.3s ease-in-out infinite;
       }
 
-      .sk-pill {
-        width: 130px;
-        height: 22px;
-        border-radius: 999px;
-      }
-      .sk-star {
-        width: 18px;
-        height: 18px;
-        border-radius: 6px;
-      }
       .sk-meta {
-        width: 100%;
-        height: 14px;
-      }
-      .sk-meta.short {
-        width: 60%;
-      }
-      .sk-button {
-        width: 150px;
-        height: 34px;
-        border-radius: 12px;
-        margin-top: 4px;
+        width: 70%;
+        height: 11px;
       }
       .sk-title {
-        width: 55%;
-        height: 20px;
-        margin-bottom: 18px;
-      }
-      .sk-body {
-        width: 100%;
-        height: 14px;
-        margin-bottom: 10px;
-      }
-      .sk-body.short {
-        width: 70%;
+        width: 85%;
+        height: 15px;
       }
 
       @keyframes sk-shimmer {
@@ -1904,8 +1767,8 @@
 
       @media (max-width: 720px) {
         .shell {
-          width: min(100vw - 20px, 1240px);
-          margin-top: 10px;
+          width: calc(100vw - 20px);
+          padding-top: 10px;
         }
 
         .hero {
@@ -1916,28 +1779,11 @@
         .toolbar {
           grid-template-columns: 1fr;
         }
-
-        .card {
-          grid-template-columns: 1fr;
-          gap: 18px;
-          padding: 20px;
-        }
-      }
-
-      /* Pinned cards get a deeper shadow for elevation. Agent identity
-         lives on the .source-pill chip, so the card edge stays neutral. */
-      .card.is-pinned {
-        box-shadow: var(--shadow-pinned);
-      }
-
-      .card-head-actions {
-        flex-shrink: 0;
-        display: inline-flex;
-        align-items: center;
-        gap: 2px;
       }
 
       .pin-button {
+        display: inline-flex;
+        align-items: center;
         flex-shrink: 0;
         border: 0;
         background: transparent;
@@ -1956,66 +1802,7 @@
       }
 
       .pin-button.is-pinned {
-        color: var(--accent, var(--codex));
-      }
-
-      .card-delete-button {
-        flex-shrink: 0;
-        display: inline-flex;
-        align-items: center;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-        color: var(--muted);
-        line-height: 1;
-        padding: 4px 6px;
-        border-radius: 6px;
-        transition:
-          background 0.12s,
-          color 0.12s;
-      }
-
-      .card-delete-button:hover {
-        background: color-mix(
-          in oklch,
-          var(--usage-pressure-high) 10%,
-          transparent
-        );
-        color: var(--usage-pressure-high);
-      }
-
-      /* Keyboard navigation: the active card gets a focus ring so j/k
-         movement is visible without scrolling the page. */
-      .card.is-active {
-        outline: 2px solid var(--accent, var(--codex));
-        outline-offset: 2px;
-      }
-
-      /* Back-to-top button: fixed in bottom-right, appears after scroll. */
-      .back-to-top {
-        position: fixed;
-        right: 24px;
-        bottom: 24px;
-        z-index: 50;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        border: 1px solid var(--line);
-        border-radius: 50%;
-        background: var(--panel-strong);
-        box-shadow: var(--shadow-back-top);
-        color: var(--muted);
-        font-size: 18px;
-        line-height: 1;
-        cursor: pointer;
-        transition: opacity 0.2s, transform 0.2s;
-      }
-
-      .back-to-top:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-back-top-hover);
+        color: var(--text);
       }
 
       /* Command palette modal (Cmd+K). Uses the native <dialog> element

@@ -52,14 +52,12 @@ HOME_DIR_RE = re.compile(r"^/(?:Users|home)/([^/]+)")
 LOCAL_USER = os.path.basename(LOCAL_HOME.rstrip("/")) or "unknown"
 CURRENT_CWD = os.getcwd() if os.path.isdir(os.getcwd()) else LOCAL_HOME
 
-DEFAULT_LIMIT = 1000
-MAX_LIMIT = 1000
+# Safety cap, not a page size: the client filters and searches the whole
+# list. Hitting it is reported (X-Sessions-Truncated) rather than silent.
+DEFAULT_LIMIT = 10000
+MAX_LIMIT = 10000
 CLIP_LEN = 360
 
-# Files larger than this are read head + tail only; smaller ones whole.
-FULL_READ_LIMIT = 2 * 1024 * 1024
-HEAD_BYTES = 512 * 1024
-TAIL_BYTES = 1024 * 1024
 
 # User texts that are harness/CLI noise, not something the human typed.
 SKIP_USER_PREFIXES = (
@@ -74,6 +72,10 @@ SKIP_USER_PREFIXES = (
     # Codex injects its installable-plugin marketplace list as a user-role
     # message at session bootstrap (plugins.recommendations).
     "<recommended_plugins",
+    # Codex: repo AGENTS.md contents, and the transcript its guardian
+    # (auto-approval reviewer) subagent is asked to assess.
+    "# AGENTS.md instructions",
+    "The following is the Codex agent history",
 )
 
 SESSION_ID_RE = re.compile(r"^[0-9a-fA-F][0-9a-fA-F-]{6,62}[0-9a-fA-F]$")

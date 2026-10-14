@@ -38,7 +38,17 @@ DELETE_HANDLERS = {
     "pi": pi.delete_session,
 }
 
-# Session-id shapes differ per tool; used by both resume and delete.
+MESSAGE_HANDLERS = {
+    "claude": claude.messages,
+    "codex": codex.messages,
+    "copilot": copilot.messages,
+    "devin": devin.messages,
+    "grok": grok.messages,
+    "opencode": opencode.messages,
+    "pi": pi.messages,
+}
+
+# Session-id shapes differ per tool; used by resume, delete and messages.
 SOURCE_ID_RES = {
     "devin": DEVIN_ID_RE,
     "opencode": OPENCODE_ID_RE,
@@ -46,11 +56,13 @@ SOURCE_ID_RES = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send_json(self, payload, status=200):
+    def _send_json(self, payload, status=200, headers=None):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -97,7 +109,12 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     limit = DEFAULT_LIMIT
                 limit = max(1, min(limit, MAX_LIMIT))
-                self._send_json(scan_sessions(limit))
+                full = query.get("fields", [""])[0] == "full"
+                sessions, truncated = scan_sessions(limit, full)
+                self._send_json(
+                    sessions,
+                    headers={"X-Sessions-Truncated": "1"} if truncated else None,
+                )
             elif path == "/api/session":
                 query = parse_qs(parsed.query)
                 source = query.get("source", [""])[0]
@@ -110,18 +127,22 @@ class Handler(BaseHTTPRequestHandler):
                     page_size = int(query.get("page_size", ["50"])[0])
                 except ValueError:
                     page_size = 50
-                page = max(1, page)
+                # page 0 = last page, which the detail pane opens on.
+                page = max(0, page)
                 page_size = max(1, min(page_size, 200))
-                if source == "devin" and DEVIN_ID_RE.match(session_id):
-                    payload = devin.messages(session_id, page, page_size)
-                    if payload is None:
-                        self.send_error(404)
-                    else:
-                        self._send_json(
-                            {"source": source, "session_id": session_id, **payload}
-                        )
-                else:
+                handler = MESSAGE_HANDLERS.get(source)
+                id_re = SOURCE_ID_RES.get(source, SESSION_ID_RE)
+                payload = (
+                    handler(session_id, page, page_size)
+                    if handler and id_re.fullmatch(session_id)
+                    else None
+                )
+                if payload is None:
                     self.send_error(404)
+                else:
+                    self._send_json(
+                        {"source": source, "session_id": session_id, **payload}
+                    )
             else:
                 self.send_error(404)
         else:

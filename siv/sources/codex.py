@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ..config import CODEX_GLOB
 from ..text import usable_user_text
-from .jsonl_files import collect_jsonl, delete_file_session
+from .jsonl_files import collect_jsonl, delete_file_session, file_messages
 
 # session_meta.originator values that mean "started by automation":
 # codex_exec = `codex exec`, acpx = ACP clients (batch harnesses),
@@ -12,6 +12,32 @@ from .jsonl_files import collect_jsonl, delete_file_session
 # interactive; unknown values stay unflagged so a future interactive
 # frontend isn't mislabeled.
 HEADLESS_ORIGINATORS = {"codex_exec", "acpx", "codex_cli_rs"}
+
+# codex_vscode wraps each prompt in editor context (active file, open
+# tabs); the person's words follow this heading.
+IDE_CONTEXT_PREFIX = "# Context from my IDE setup:"
+IDE_REQUEST_MARKER = "## My request for Codex:"
+
+
+def _user_prompt(text):
+    if text.lstrip().startswith(IDE_CONTEXT_PREFIX):
+        _, marker, request = text.partition(IDE_REQUEST_MARKER)
+        return request.strip() if marker else ""
+    return text
+
+
+def _origin(meta):
+    """(origin label, headless) from session_meta.
+
+    Subagents (source {"subagent": ...}: guardian approval reviews, spawned
+    worker threads) report the parent's codex-tui originator, so the source
+    decides first.
+    """
+    source = meta.get("source")
+    if isinstance(source, dict) and "subagent" in source:
+        return "subagent", True
+    originator = meta.get("originator") or ""
+    return originator, originator in HEADLESS_ORIGINATORS
 
 
 def codex_message_text(record, role, content_type):
@@ -23,11 +49,12 @@ def codex_message_text(record, role, content_type):
     ):
         return None
     content = payload.get("content") or []
-    return "\n".join(
+    text = "\n".join(
         block.get("text", "")
         for block in content
         if isinstance(block, dict) and block.get("type") == content_type
     )
+    return _user_prompt(text) if role == "user" else text
 
 
 def _duration_s(first_ts, last_ts):
@@ -134,6 +161,7 @@ def parse_codex(records):
 
     sort_ts = last_ts or meta.get("timestamp", "")
     session_id = meta.get("id", "") or meta.get("session_id", "")
+    origin, headless = _origin(meta)
     if not sort_ts or not session_id:
         return None
 
@@ -164,8 +192,8 @@ def parse_codex(records):
         "sort_ts": sort_ts,
         "cwd": meta.get("cwd", ""),
         "session_id": session_id,
-        "origin": meta.get("originator") or "",
-        "headless": (meta.get("originator") or "") in HEADLESS_ORIGINATORS,
+        "origin": origin,
+        "headless": headless,
         "title": "",
         "first_user": first_user,
         "last_user": last_user,
@@ -179,12 +207,47 @@ def collect(limit):
     return collect_jsonl(CODEX_GLOB, "codex", parse_codex, limit)
 
 
+def _session_id(record):
+    if record.get("type") != "session_meta":
+        return ""
+    payload = record.get("payload") or {}
+    return payload.get("id") or payload.get("session_id") or ""
+
+
+def _events(records):
+    """response_item messages, reasoning summaries and *_call items."""
+    for record in records:
+        if record.get("type") != "response_item":
+            continue
+        payload = record.get("payload") or {}
+        ptype = payload.get("type") or ""
+        ts = record.get("timestamp") or ""
+        if ptype == "message" and payload.get("role") in ("user", "assistant"):
+            role = payload["role"]
+            content_type = "input_text" if role == "user" else "output_text"
+            yield {
+                "role": role,
+                "content": codex_message_text(record, role, content_type) or "",
+                "created_at": ts,
+            }
+        elif ptype == "reasoning":
+            summary = "\n".join(
+                s.get("text", "")
+                for s in payload.get("summary") or []
+                if isinstance(s, dict)
+            ).strip()
+            if summary:
+                yield {"role": "assistant", "thinking": summary}
+        elif ptype.endswith("_call"):
+            yield {"role": "assistant", "tool_calls": 1}
+
+
+def messages(session_id, page=1, page_size=50):
+    return file_messages(
+        CODEX_GLOB, session_id, _session_id, _events, page, page_size
+    )
+
+
 def delete_session(session_id):
     """Trash the rollout .jsonl whose session_meta carries this id."""
-    def extract(record):
-        if record.get("type") != "session_meta":
-            return ""
-        payload = record.get("payload") or {}
-        return payload.get("id") or payload.get("session_id") or ""
-
-    return delete_file_session(CODEX_GLOB, session_id, extract)
+    return delete_file_session(CODEX_GLOB, session_id, _session_id)

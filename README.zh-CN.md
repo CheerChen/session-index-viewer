@@ -50,30 +50,45 @@ cd frontend && npm install && npm run build
 | Copilot CLI | `~/.copilot/session-store.db` | `copilot --resume <id>` | 累加每轮 `assistant_usage_events`；Context 约为单轮 input 峰值 |
 | opencode | `~/.local/share/opencode/opencode.db` | `opencode --session <id>` | 取 `session` 累计 token 汇总；Context 约为单条 assistant 消息 total 最大 |
 
-卡片上的 usage 是短 chip（`ctx · out · tools · turns`）。点击，或在选中卡片后
-按 **`u`**，打开 modal：Overview KPI、token 分项、Activity、**上下文压力条**
+详情栏里的 usage 是短 chip（`ctx · out · tools · turns`）。点击，或按
+**`u`**，打开 modal：Overview KPI、token 分项、Activity、**上下文压力条**
 （峰值 context 占该模型窗口上限的百分比，绿 / 黄 / 红三色），以及该 source
 的计量口径说明。
 
 **Context** 表示峰值 / 窗口占用，不是整场会话的计费 total。Grok 往往只有
 size 信号（chip 上标 **size only**）。
 
+## 布局
+
+两栏。左栏把每个 session 列成一行精简信息（标题、来源、headless 标记、
+项目、轮次、时间），置顶的在前，其余按时间倒序。右栏显示当前 session：
+cwd、id、resume 和复制命令、usage，以及对话内容——用户的每轮提问，加上
+每轮合并后的一条回复，中间的 tool 调用只计数不展开。默认打开最新一页，
+**Load earlier** 往前翻。窗口宽度小于 900px 时，列表占满屏幕，详情栏从
+右侧滑出覆盖在列表上。
+
+搜索范围是标题、提问（第一条和最后一条）、cwd 和 session id，不含回复。
+列表包含全部 session，上限 10,000 条作为安全阈值；触及上限时，列表末尾
+会有提示。
+
 ## 键盘
 
 | 键 | 作用 |
 |----|------|
-| `j` / `k` 或方向键 | 移动当前卡片 |
+| `j` / `k` 或方向键 | 移动当前 session（详情栏跟着切换） |
 | `Enter` | 在 Terminal 中 resume |
 | `c` | 复制 resume 命令（不含 ⌘C，系统复制仍可用） |
 | `p` | 置顶 / 取消置顶 |
 | `u` | 打开 usage modal（有用量数据时） |
 | `x` | 删除 session（二次确认后移入 Trash） |
+| `m` / ⌘ 点击 | 标记待批量删除；之后按 `x` 删除全部标记项 |
+| `Esc` | 清除标记；窄屏时关闭详情栏 |
 | `⌘K` / `Ctrl+K` | 命令面板 |
 
 ## Headless session
 
 没人能在里面接话的 session 算 **headless**：`-p` / exec 运行、ACP / MCP
-驱动、subagent，不论是脚本还是别的 agent 启动的。卡片上显示琥珀色
+驱动、subagent，不论是脚本还是别的 agent 启动的。列表和详情栏显示琥珀色
 `headless` 标签；工具栏的 origin 筛选默认隐藏它们（`Interactive` /
 `All Origins` / `Headless Only`，按浏览器记住）。搜索因为这个筛选而
 无结果时，空状态会提示并一键显示被隐藏的命中。`Headless Only` 配合
@@ -82,7 +97,7 @@ size 信号（chip 上标 **size only**）。
 | 来源 | 判定信号 |
 |------|----------|
 | Claude Code | 所有记录的 `entrypoint` 都是 `sdk-*`（`sdk-cli` 即 `claude -p`）；之后在 TUI 里接着聊就算交互 |
-| Codex | `session_meta.originator` 为 `codex_exec`、`acpx` 或 `codex_cli_rs` |
+| Codex | `session_meta.originator` 为 `codex_exec`、`acpx` 或 `codex_cli_rs`，或 `source` 是 subagent（guardian 审批、派生的子线程） |
 | Devin | 用户消息都不带 `chisel/client-message-id`。旧版 Devin 从不写这个字段，所以只对比最早带标记的 session 更新的 session 打标 |
 | Copilot CLI | `session-state/<id>/events.jsonl` 的 system prompt 含 "running in non-interactive mode" |
 | opencode | `opencode run`（`permission` 里 deny 了 `question`）或 subagent（有 `parent_id`） |
@@ -91,7 +106,7 @@ size 信号（chip 上标 **size only**）。
 
 ## 删除 session
 
-每张卡片有删除按钮（或选中后按 `x`），确认后经 `~/.Trash` 移除——
+详情栏顶部的垃圾桶按钮（或按 `x`）确认后经 `~/.Trash` 移除——
 文件类 source（Claude / Codex / Pi / Grok）整体移入废纸篓；数据库类
 source（Devin / Copilot / opencode）先把该 session 的所有行导出为
 JSON 放入废纸篓，再删库里的行。`~/.Trash` 不存在时删除功能整体禁用。
@@ -103,15 +118,19 @@ JSON 放入废纸篓，再删库里的行。`~/.Trash` 不存在时删除功能�
 - `server.py` — 薄入口（`python3 server.py` / launchd）。
 - `siv/` — 仅标准库的后端，监听 `127.0.0.1:7333`：
   - `GET /` 返回页面。
-  - `GET /api/sessions?limit=1000` 实时扫描 session，按 mtime/size 缓存。
+  - `GET /api/sessions` 实时扫描 session，按 mtime/size 缓存。列表不含
+    最后一条回复（旧版页面用 `?fields=full` 取回）；列表被截断时响应头带
+    `X-Sessions-Truncated: 1`。
+  - `GET /api/session?source=&session_id=&page=` 返回某个 session 对话的
+    一页（`page=0` 为最新一页）。
   - `POST /api/resume` 校验后打开终端执行
     `cd <cwd> && <工具> resume <id>`。若 cwd 是另一台机器的 home 前缀，
     会先映射到本机。
   - Host 标签取自 cwd 中的用户名（`/Users/<name>/...` 或 `/home/<name>/...`）。
   - 解析逻辑在 `siv/sources/`（`claude` / `codex` / `devin` / `grok` / `pi` /
     `copilot` / `opencode`）。
-- `frontend/` — React 卡片 UI（搜索、source/host 过滤、置顶、usage modal、
-  深色 / 浅色主题切换）。
+- `frontend/` — React 两栏 UI（session 列表、对话详情栏、搜索与筛选、置顶、
+  usage modal、深色 / 浅色主题切换）。
 - `sessions-index.html` — 旧版单文件 UI（无 dist 时回退）。
 - `install.sh` — 写入 launchd plist，并可构建前端。日志：
   `~/Library/Logs/session-index-viewer.log`。

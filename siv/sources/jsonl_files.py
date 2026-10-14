@@ -5,20 +5,14 @@ import json
 import os
 
 from .. import cache
-from ..io_util import decode_records, read_lines
+from ..conversation import cached, fold_turns, paginate
+from ..io_util import read_records
 from ..text import clean_inline, clean_multiline, clip
 from ..trash import move_to_trash
 
 
-def parse_file(path, parser, size):
-    lines, windowed = read_lines(path, size)
-    entry = parser(decode_records(lines))
-    if windowed:
-        # Head+tail can miss middle turns (usage sums, tool counts, and
-        # sometimes first/last user). Re-read fully for accurate aggregates.
-        with open(path, "rb") as f:
-            lines = f.read().decode("utf-8", "replace").splitlines()
-        entry = parser(decode_records(lines))
+def parse_file(path, parser):
+    entry = parser(read_records(path))
     if entry is None:
         return None
     entry["title"] = clip(clean_inline(entry["title"]), 200)
@@ -37,7 +31,7 @@ def cached_entry(path, parser):
     if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
         return hit[2]
     try:
-        entry = parse_file(path, parser, st.st_size)
+        entry = parse_file(path, parser)
     except OSError:
         entry = None
     cache.set(path, (st.st_mtime_ns, st.st_size, entry))
@@ -95,20 +89,44 @@ def _quick_id(path, extract_id, max_lines=10):
     return None
 
 
-def delete_file_session(pattern, session_id, extract_id):
-    """Move the session file whose id matches into ~/.Trash.
+def find_session_file(pattern, session_id, extract_id):
+    """Path of the session file whose records carry this id, or None.
 
     extract_id(record) -> session id str for one parsed JSONL record.
     The id is re-derived from file contents server-side; the client
-    never supplies a filesystem path.
+    never supplies a filesystem path. Files whose name contains the id
+    (Claude, Codex and Pi all embed it) are checked first.
     """
-    for path in glob.glob(pattern):
-        if _quick_id(path, extract_id) != session_id:
-            continue
-        try:
-            move_to_trash(path)
-        except OSError:
-            return {"ok": False, "error": "Could not move session to Trash."}, 500
-        cache.delete(path)
-        return {"ok": True}, 200
-    return {"ok": False, "error": "Session not found."}, 404
+    paths = sorted(glob.glob(pattern), key=lambda p: session_id not in p)
+    for path in paths:
+        if _quick_id(path, extract_id) == session_id:
+            return path
+    return None
+
+
+def delete_file_session(pattern, session_id, extract_id):
+    """Move the session file whose id matches into ~/.Trash."""
+    path = find_session_file(pattern, session_id, extract_id)
+    if path is None:
+        return {"ok": False, "error": "Session not found."}, 404
+    try:
+        move_to_trash(path)
+    except OSError:
+        return {"ok": False, "error": "Could not move session to Trash."}, 500
+    cache.delete(path)
+    return {"ok": True}, 200
+
+
+def file_messages(pattern, session_id, extract_id, to_events, page, page_size):
+    """Paginated conversation for a JSONL-backed session, or None."""
+    path = find_session_file(pattern, session_id, extract_id)
+    if path is None:
+        return None
+    try:
+        st = os.stat(path)
+        key = (path, st.st_mtime_ns, st.st_size)
+
+        all_messages = cached(key, lambda: fold_turns(to_events(read_records(path))))
+    except OSError:
+        return None
+    return paginate(all_messages, page, page_size)

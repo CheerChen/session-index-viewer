@@ -23,31 +23,12 @@ from .config import (
 )
 from .resume import open_in_terminal, resume_command
 from .scan import scan_sessions
-from .sources import claude, codex, copilot, devin, grok, opencode, pi
+from . import search
+from .sources import MODULES
 from .trash import trash_available
 
 # Per-source delete adapters; every one leaves a recoverable artifact in
 # ~/.Trash (moved file/dir or a JSON row dump).
-DELETE_HANDLERS = {
-    "claude": claude.delete_session,
-    "codex": codex.delete_session,
-    "copilot": copilot.delete_session,
-    "devin": devin.delete_session,
-    "grok": grok.delete_session,
-    "opencode": opencode.delete_session,
-    "pi": pi.delete_session,
-}
-
-MESSAGE_HANDLERS = {
-    "claude": claude.messages,
-    "codex": codex.messages,
-    "copilot": copilot.messages,
-    "devin": devin.messages,
-    "grok": grok.messages,
-    "opencode": opencode.messages,
-    "pi": pi.messages,
-}
-
 # Session-id shapes differ per tool; used by resume, delete and messages.
 SOURCE_ID_RES = {
     "devin": DEVIN_ID_RE,
@@ -115,6 +96,12 @@ class Handler(BaseHTTPRequestHandler):
                     sessions,
                     headers={"X-Sessions-Truncated": "1"} if truncated else None,
                 )
+            elif path == "/api/search":
+                q = parse_qs(parsed.query).get("q", [""])[0][:200]
+                # Pick up sessions that changed since the last sync; a
+                # big backlog is indexed in the background instead.
+                search.catch_up(scan_sessions(DEFAULT_LIMIT)[0])
+                self._send_json(search.search(q))
             elif path == "/api/session":
                 query = parse_qs(parsed.query)
                 source = query.get("source", [""])[0]
@@ -130,11 +117,11 @@ class Handler(BaseHTTPRequestHandler):
                 # page 0 = last page, which the detail pane opens on.
                 page = max(0, page)
                 page_size = max(1, min(page_size, 200))
-                handler = MESSAGE_HANDLERS.get(source)
+                module = MODULES.get(source)
                 id_re = SOURCE_ID_RES.get(source, SESSION_ID_RE)
                 payload = (
-                    handler(session_id, page, page_size)
-                    if handler and id_re.fullmatch(session_id)
+                    module.messages(session_id, page, page_size)
+                    if module and id_re.fullmatch(session_id)
                     else None
                 )
                 if payload is None:
@@ -159,8 +146,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _delete_one(self, source, session_id):
         """Validate + dispatch one delete. Returns (result, status)."""
-        handler = DELETE_HANDLERS.get(source)
-        if handler is None:
+        module = MODULES.get(source)
+        if module is None:
             return {
                 "source": source,
                 "session_id": session_id,
@@ -175,7 +162,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": False,
                 "error": "bad session id",
             }, 400
-        result, status = handler(session_id)
+        result, status = module.delete_session(session_id)
         result["source"] = source
         result["session_id"] = session_id
         return result, status
@@ -270,9 +257,14 @@ class Handler(BaseHTTPRequestHandler):
         pass  # keep launchd logs quiet on routine requests
 
 
+def _warm():
+    # Warm the parse cache so the first browser hit doesn't eat the cold
+    # scan, then build or catch up the search index.
+    search.sync(scan_sessions(DEFAULT_LIMIT)[0])
+
+
 def main():
-    # Warm the cache so the first browser hit doesn't eat the cold scan.
-    threading.Thread(target=scan_sessions, args=(DEFAULT_LIMIT,), daemon=True).start()
+    threading.Thread(target=_warm, daemon=True).start()
     server = ThreadingHTTPServer((BIND, PORT), Handler)
     print(f"session-index-viewer listening on http://{BIND}:{PORT}")
     server.serve_forever()

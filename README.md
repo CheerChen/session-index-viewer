@@ -74,9 +74,30 @@ the tool calls in between counted rather than shown. It opens on the newest
 page; **Load earlier** pages back. Below 900px wide the list fills the
 screen and the detail pane slides over it.
 
-Search matches titles, prompts (first and last), cwd and session id, not
-replies. The list holds every session up to a 10,000-session safety cap;
-if the cap is hit, a note at the end of the list says so.
+The list holds every session up to a 10,000-session safety cap; if the cap
+is hit, a note at the end of the list says so.
+
+## Search
+
+One box, two layers. Titles, first/last prompts, cwd and session id are
+filtered as you type. Once typing pauses, the query also runs against the
+full text of every conversation — user prompts and replies, the same
+messages the detail pane shows — and sessions that match only there join
+the list with a `N hits` count. Results stay in time order.
+
+- Words are ANDed within one message; `"double quotes"` keep a phrase.
+- Matching is substring-based (SQLite FTS5, trigram tokenizer), so
+  Chinese / Japanese and code fragments work. Terms under three
+  characters fall back to a plain scan.
+- In the detail pane, matches are highlighted and the pane scrolls to the
+  newest one; `n` / `N` step through them. Matches in pages not loaded
+  yet are counted, with a link to load earlier pages.
+
+The index lives in `~/.cache/session-index-viewer/index.db`
+(`$XDG_CACHE_HOME` if set). It is built in the background at startup
+(about 15 s for ~1,000 sessions; a note shows while it builds) and caught
+up incrementally before each search. It is derived data: delete it to
+force a rebuild.
 
 ## Keyboard
 
@@ -89,6 +110,7 @@ if the cap is hit, a note at the end of the list says so.
 | `u` | Open usage modal (when usage exists) |
 | `x` | Delete session (moves data to Trash, confirmed first) |
 | `m` / ⌘-click | Mark for bulk delete; `x` then deletes the marked set |
+| `n` / `N` | Next / previous search match in the detail pane |
 | `Esc` | Clear marks; on narrow screens, close the detail pane |
 | `⌘K` / `Ctrl+K` | Command palette |
 
@@ -134,6 +156,8 @@ noise — for quick pruning.
     carries `X-Sessions-Truncated: 1`.
   - `GET /api/session?source=&session_id=&page=` returns one page of a
     session's conversation (`page=0` = newest page).
+  - `GET /api/search?q=` returns full-text hits per session (message
+    count and positions), syncing the index first.
   - `POST /api/resume` opens a Terminal window with a validated
     `cd <cwd> && <tool> resume <id>` command. If the recorded cwd belongs
     to another machine, the home-dir prefix is remapped to this machine.

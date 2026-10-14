@@ -7,6 +7,8 @@ import type {
   TurnsFilter,
 } from "./types";
 import { useSessions } from "./hooks/useSessions";
+import { useSearch } from "./hooks/useSearch";
+import type { SearchHit } from "./api";
 import { usePinned } from "./hooks/usePinned";
 import { useTheme } from "./hooks/useTheme";
 import { sessionKey } from "./utils/format";
@@ -65,12 +67,15 @@ function matchesOrigin(item: Session, origin: OriginFilter): boolean {
 }
 
 // Everything except the origin filter; the empty state reuses this to
-// count matches the origin filter is hiding.
+// count matches the origin filter is hiding. A query matches either the
+// session's metadata (instant, client-side) or its conversation text
+// (server full-text hits, arriving once typing pauses).
 function matchesRest(
   item: Session,
   source: SourceFilter,
   turns: TurnsFilter,
   q: string,
+  hits: Record<string, SearchHit> | null,
 ): boolean {
   if (source !== "all" && item.source !== source) return false;
   // Sessions without usage can't be classified — exclude them
@@ -87,7 +92,7 @@ function matchesRest(
   ]
     .join("\n")
     .toLowerCase();
-  return haystack.includes(q);
+  return haystack.includes(q) || !!hits?.[sessionKey(item)];
 }
 
 export default function App() {
@@ -112,6 +117,8 @@ export default function App() {
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
   const { query, source, turns, origin } = filter;
+  const search = useSearch(query);
+  const hits = search?.hits ?? null;
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +127,8 @@ export default function App() {
     return sessions
       .filter(
         (item) =>
-          matchesOrigin(item, origin) && matchesRest(item, source, turns, q),
+          matchesOrigin(item, origin) &&
+          matchesRest(item, source, turns, q, hits),
       )
       .sort((a, b) => {
         // Pinned sessions float above the rest; within each group,
@@ -132,16 +140,17 @@ export default function App() {
         const right = new Date(b.timestamp).getTime() || 0;
         return right - left;
       });
-  }, [sessions, query, source, turns, origin, pinnedIds]);
+  }, [sessions, query, source, turns, origin, hits, pinnedIds]);
 
   // Matches the origin filter alone is hiding — only computed when
   // nothing is shown, to offer a one-click switch.
   const hiddenByOrigin = useMemo(() => {
     if (filtered.length > 0 || origin === "all") return 0;
     const q = query.trim().toLowerCase();
-    return sessions.filter((item) => matchesRest(item, source, turns, q))
-      .length;
-  }, [filtered.length, sessions, query, source, turns, origin]);
+    return sessions.filter((item) =>
+      matchesRest(item, source, turns, q, hits),
+    ).length;
+  }, [filtered.length, sessions, query, source, turns, origin, hits]);
 
   const setOrigin = useCallback((value: OriginFilter) => {
     saveOrigin(value);
@@ -487,6 +496,7 @@ export default function App() {
                       }
                       selected={selected.has(sessionKey(item))}
                       showHost={multiHost}
+                      hitCount={hits?.[sessionKey(item)]?.count ?? 0}
                       queryText={queryText}
                       onActivate={handleActivate}
                       onToggleSelect={handleToggleSelect}
@@ -494,6 +504,12 @@ export default function App() {
                   </div>
                 );
               })}
+            </div>
+          )}
+          {search?.indexing && (
+            <div className="list-notice" role="status">
+              Building the search index; conversation matches may be
+              incomplete.
             </div>
           )}
           {truncated && (
@@ -507,6 +523,10 @@ export default function App() {
         <section className={`detail-pane ${detailOpen ? "is-open" : ""}`}>
           <SessionDetail
             session={activeSession}
+            searchTerms={search?.terms ?? []}
+            searchHit={
+              activeSession ? (hits?.[sessionKey(activeSession)] ?? null) : null
+            }
             pinned={activeSession ? isPinned(activeSession) : false}
             onPin={togglePin}
             onUsageOpen={handleUsageOpen}

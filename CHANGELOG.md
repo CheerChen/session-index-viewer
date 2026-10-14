@@ -2,6 +2,22 @@
 
 ## 2026-10-14
 
+### Full-text search
+- **Search reaches into conversations.** The search box still filters
+  metadata as you type; after a pause the query also runs against every
+  session's prompts and replies, and sessions matching only there join
+  the list with a hit count. Results keep time order.
+- **Index.** SQLite FTS5 with the trigram tokenizer (the default
+  tokenizer finds no CJK at all), stored under
+  `~/.cache/session-index-viewer/`, built in the background at startup
+  and synced incrementally by each session's last-activity timestamp.
+  Terms under three characters fall back to LIKE. Terms are ANDed per
+  message; quotes keep phrases.
+- **Matches in the detail pane** are marked with the CSS Custom
+  Highlight API (no DOM changes to rendered markdown); the pane jumps to
+  the newest match and `n` / `N` step through them. Matches in pages not
+  loaded yet are counted with a load-earlier link.
+
 ### Two-pane layout
 - **List + detail replace the card stack.** Sessions are compact rows
   (title, source, headless flag, project, turns, age); the active one

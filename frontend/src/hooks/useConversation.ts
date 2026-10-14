@@ -3,7 +3,7 @@ import { fetchSessionMessages } from "../api";
 import { sessionKey } from "../utils/format";
 import type { Session, SessionMessage } from "../types";
 
-const PAGE_SIZE = 50;
+export const PAGE_SIZE = 50;
 // j/k can sweep through many rows; only fetch once the cursor rests.
 const DEBOUNCE_MS = 150;
 const CACHE_LIMIT = 50;

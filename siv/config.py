@@ -38,6 +38,14 @@ COPILOT_DB = os.path.expanduser("~/.copilot/session-store.db")
 # and model are denormalised onto the `session` row.
 OPENCODE_DB = os.path.expanduser("~/.local/share/opencode/opencode.db")
 
+# Full-text search index (siv/search.py). Derived data: safe to delete,
+# it is rebuilt in the background on the next start.
+INDEX_DB = os.path.join(
+    os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+    "session-index-viewer",
+    "index.db",
+)
+
 # Grok sessions live under $GROK_HOME/sessions/<encoded-cwd>/<uuid>/
 # (default GROK_HOME is ~/.grok). Each session is a directory of JSON/JSONL
 # files; summary.json is the index entry and updates.jsonl is the

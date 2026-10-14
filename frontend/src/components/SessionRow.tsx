@@ -21,6 +21,8 @@ interface SessionRowProps {
   lastPinned: boolean;
   selected: boolean;
   showHost: boolean;
+  // Messages in this session matching the full-text query (0 = none).
+  hitCount: number;
   queryText: string;
   onActivate: (index: number) => void;
   onToggleSelect: (index: number) => void;
@@ -40,6 +42,7 @@ function SessionRowImpl({
   lastPinned,
   selected,
   showHost,
+  hitCount,
   queryText,
   onActivate,
   onToggleSelect,
@@ -93,6 +96,11 @@ function SessionRowImpl({
         {session.usage && (
           <span className="row-turns" title="User turns">
             {session.usage.user_turns}t
+          </span>
+        )}
+        {hitCount > 0 && (
+          <span className="row-hits" title="Messages matching the search">
+            {hitCount} {hitCount === 1 ? "hit" : "hits"}
           </span>
         )}
         <span className="row-time" title={formatTimestamp(session.timestamp)}>

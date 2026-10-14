@@ -1,6 +1,8 @@
 import { Fragment, memo, useLayoutEffect, useMemo, useRef } from "react";
 import type { Session, SessionMessage } from "../types";
-import { useConversation } from "../hooks/useConversation";
+import { PAGE_SIZE, useConversation } from "../hooks/useConversation";
+import { useSearchHighlight } from "../hooks/useSearchHighlight";
+import type { SearchHit } from "../api";
 import {
   formatRelative,
   formatTimestamp,
@@ -52,6 +54,9 @@ const MessageBody = memo(function MessageBody({
 
 interface SessionDetailProps {
   session: Session | null;
+  // Full-text query terms and this session's hits (null: none / no query).
+  searchTerms: string[];
+  searchHit: SearchHit | null;
   pinned: boolean;
   onPin: (session: Session) => void;
   onUsageOpen: (session: Session) => void;
@@ -62,6 +67,8 @@ interface SessionDetailProps {
 
 function Detail({
   session,
+  searchTerms,
+  searchHit,
   pinned,
   onPin,
   onUsageOpen,
@@ -75,6 +82,12 @@ function Detail({
   // the reader's position doesn't jump.
   const prependAnchor = useRef<number | null>(null);
   const count = conv.data?.messages.length ?? 0;
+  const highlight = useSearchHighlight(
+    bodyRef,
+    searchHit ? searchTerms : [],
+    `${conv.key}#${count}`,
+    conv.key,
+  );
 
   useLayoutEffect(() => {
     const el = bodyRef.current;
@@ -95,6 +108,12 @@ function Detail({
   const accent = sourceAccent(session.source);
   const headless = headlessOrigin(session);
   const data = conv.data;
+
+  // Hits in pages not loaded yet (positions are 0-based over the whole
+  // conversation; loaded pages start at firstPage).
+  const firstLoaded = data ? (data.firstPage - 1) * PAGE_SIZE : 0;
+  const earlierHits =
+    searchHit?.positions.filter((p) => p < firstLoaded).length ?? 0;
 
   const loadEarlier = () => {
     const el = bodyRef.current;
@@ -218,6 +237,45 @@ function Detail({
           )}
         </div>
       </header>
+
+      {searchHit && data && (highlight.count > 0 || earlierHits > 0) && (
+        <div className="detail-search" role="status">
+          {highlight.count > 0 && (
+            <>
+              <span>
+                Match {highlight.current + 1 || "–"} / {highlight.count}
+              </span>
+              <button
+                type="button"
+                className="toggle-button"
+                onClick={() => highlight.step(-1)}
+                title="Previous match (N)"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="toggle-button"
+                onClick={() => highlight.step(1)}
+                title="Next match (n)"
+              >
+                ↓
+              </button>
+            </>
+          )}
+          {earlierHits > 0 && (
+            <button
+              type="button"
+              className="empty-action"
+              onClick={loadEarlier}
+              disabled={conv.loadingEarlier}
+            >
+              {earlierHits} more {earlierHits === 1 ? "message" : "messages"}{" "}
+              match in earlier pages · Load earlier
+            </button>
+          )}
+        </div>
+      )}
 
       <div ref={bodyRef} className="detail-body">
         {conv.error && !data ? (

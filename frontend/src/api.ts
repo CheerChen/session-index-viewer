@@ -91,3 +91,27 @@ export async function postResume(
   });
   return res.json();
 }
+
+export interface SearchHit {
+  count: number;
+  // 0-based positions in the session's folded message list.
+  positions: number[];
+}
+
+export interface SearchResult {
+  hits: Record<string, SearchHit>;
+  terms: string[];
+  indexing: boolean;
+}
+
+export async function fetchSearch(
+  q: string,
+  signal?: AbortSignal,
+): Promise<SearchResult> {
+  const res = await fetch(`/api/search?${new URLSearchParams({ q })}`, {
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}

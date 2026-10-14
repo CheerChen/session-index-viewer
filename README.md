@@ -66,38 +66,30 @@ Grok often only has that size signal (labelled **size only** on the chip).
 
 ## Layout
 
-Two panes. The left one lists every session as a compact row (title, source,
-headless flag, project, turns, age), pinned first, then newest first. The
-right one shows the active session: its cwd, id, resume and copy actions,
-usage, and the conversation — user turns plus one folded reply per turn, with
-the tool calls in between counted rather than shown. It opens on the newest
-page; **Load earlier** pages back. Below 900px wide the list fills the
-screen and the detail pane slides over it.
-
-The list holds every session up to a 10,000-session safety cap; if the cap
-is hit, a note at the end of the list says so.
+The left pane lists sessions, pinned first, then newest first. The right
+pane shows the active session: resume and copy actions, usage, and the
+conversation. The conversation shows your prompts and the agent's replies;
+tool calls are only counted. It opens at the newest messages, and
+**Load earlier** pages back. On narrow screens the list fills the window
+and the conversation slides over it.
 
 ## Search
 
-One box, two layers. Titles, first/last prompts, cwd and session id are
-filtered as you type. Once typing pauses, the query also runs against the
-full text of every conversation — user prompts and replies, the same
-messages the detail pane shows — and sessions that match only there join
-the list with a `N hits` count. Results stay in time order.
+Typing filters by title, first and last prompt, cwd and session id, using
+the whole query as one string. A moment after you stop typing, the query
+also runs against the text of every conversation. There each word is
+matched separately, and all of them must appear in the same message;
+`"double quotes"` keep a phrase together. Sessions that match only in
+their conversation join the list with a hit count. Results stay in time
+order. Chinese, Japanese and code fragments all match.
 
-- Words are ANDed within one message; `"double quotes"` keep a phrase.
-- Matching is substring-based (SQLite FTS5, trigram tokenizer), so
-  Chinese / Japanese and code fragments work. Terms under three
-  characters fall back to a plain scan.
-- In the detail pane, matches are highlighted and the pane scrolls to the
-  newest one; `n` / `N` step through them. Matches in pages not loaded
-  yet are counted, with a link to load earlier pages.
+In the conversation, matches are highlighted and `n` / `N` step through
+them. Matches in messages not loaded yet are counted, with a link to load
+them.
 
-The index lives in `~/.cache/session-index-viewer/index.db`
-(`$XDG_CACHE_HOME` if set). It is built in the background at startup
-(about 15 s for ~1,000 sessions; a note shows while it builds) and caught
-up incrementally before each search. It is derived data: delete it to
-force a rebuild.
+The search index is kept in `~/.cache/session-index-viewer/` and built in
+the background on first start; until it is ready, a note says results may
+be incomplete. Deleting it is safe; it is rebuilt.
 
 ## Keyboard
 
@@ -116,23 +108,21 @@ force a rebuild.
 
 ## Headless sessions
 
-A session is **headless** when nobody could reply in it: `-p` / exec runs,
-ACP / MCP drivers, and subagents, whether a script or another agent
-launched them. They get an amber `headless` pill, and the toolbar's
-origin filter hides them by default (`Interactive` / `All Origins` /
-`Headless Only`, remembered per browser). When a search finds nothing
-because of that filter, the empty state offers to show the hidden
-matches. `Headless Only` plus bulk delete clears them out.
+A session is **headless** when nobody could reply in it: `-p` and exec
+runs, ACP or MCP drivers, and subagents, whether a script or another agent
+started them. They are marked `headless` and hidden by default; the
+toolbar's origin filter shows them. `Headless Only` plus bulk delete
+clears them out.
 
 | Source | Signal |
 |--------|--------|
 | Claude Code | Every record's `entrypoint` is `sdk-*` (`sdk-cli` = `claude -p`); a later TUI turn makes it interactive |
 | Codex | `session_meta.originator` is `codex_exec`, `acpx` or `codex_cli_rs`, or `source` is a subagent (guardian approval reviews, spawned worker threads) |
-| Devin | No typed message carries `chisel/client-message-id`. Older Devin builds never wrote it, so only sessions newer than the earliest tagged one are flagged |
+| Devin | No typed message carries `chisel/client-message-id`. Older Devin builds never wrote it, so sessions from those builds are never flagged |
 | Copilot CLI | The system prompt in `session-state/<id>/events.jsonl` says "running in non-interactive mode" |
 | opencode | `opencode run` (`permission` denies `question`) or a subagent (`parent_id` set) |
 | Grok | `prompt_context.json` has `is_non_interactive: true` |
-| Pi | Not detectable — `pi -p` writes the same JSONL as the TUI |
+| Pi | Not detectable: `pi -p` writes the same JSONL as the TUI |
 
 ## Deleting sessions
 
@@ -151,13 +141,9 @@ noise — for quick pruning.
 - `siv/` — stdlib-only backend on `127.0.0.1:7333`:
   - `GET /` serves the viewer.
   - `GET /api/sessions` scans session files live, with an mtime/size
-    cache so only changed files are re-parsed. Rows omit the last reply
-    (`?fields=full` adds it back for the legacy viewer); a cut-short list
-    carries `X-Sessions-Truncated: 1`.
-  - `GET /api/session?source=&session_id=&page=` returns one page of a
-    session's conversation (`page=0` = newest page).
-  - `GET /api/search?q=` returns full-text hits per session (message
-    count and positions), syncing the index first.
+    cache so only changed files are re-parsed.
+  - `GET /api/session` returns one page of a session's conversation.
+  - `GET /api/search` returns full-text hits per session.
   - `POST /api/resume` opens a Terminal window with a validated
     `cd <cwd> && <tool> resume <id>` command. If the recorded cwd belongs
     to another machine, the home-dir prefix is remapped to this machine.

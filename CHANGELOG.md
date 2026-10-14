@@ -3,64 +3,33 @@
 ## 2026-10-14
 
 ### Full-text search
-- **Search reaches into conversations.** The search box still filters
-  metadata as you type; after a pause the query also runs against every
-  session's prompts and replies, and sessions matching only there join
-  the list with a hit count. Results keep time order.
-- **Index.** SQLite FTS5 with the trigram tokenizer (the default
-  tokenizer finds no CJK at all), stored under
-  `~/.cache/session-index-viewer/`, built in the background at startup
-  and synced incrementally by each session's last-activity timestamp.
-  Terms under three characters fall back to LIKE. Terms are ANDed per
-  message; quotes keep phrases.
-- **Matches in the detail pane** are marked with the CSS Custom
-  Highlight API (no DOM changes to rendered markdown); the pane jumps to
-  the newest match and `n` / `N` step through them. Matches in pages not
-  loaded yet are counted with a load-earlier link.
+- Search now covers the text of every conversation (prompts and
+  replies), not just titles and paths. Sessions that match only in
+  their conversation show up with a hit count, still in time order.
+  Chinese, Japanese and code fragments match.
+- In the detail pane, matches are highlighted and `n` / `N` step
+  through them.
 
 ### Two-pane layout
-- **List + detail replace the card stack.** Sessions are compact rows
-  (title, source, headless flag, project, turns, age); the active one
-  opens in a right-hand pane with its actions, usage and conversation.
-  `j`/`k` drive both, with a short debounce and a client cache so
-  sweeping the list doesn't refetch. The pane opens on the newest page
-  and loads earlier pages in place without jumping. Under 900px the
-  pane slides over the list. The conversation modal (Devin only, `e`)
-  is gone.
-- **Pinning reads as pinning.** The star is now a pushpin (outline /
-  filled), pinned rows carry a pin glyph and a faint wash, and a heavier
-  rule closes the pinned group. Delete is an icon-only trash button.
-- **Conversations for every source.** `/api/session` now reads Claude,
-  Codex, Pi, Grok, Copilot and opencode as well as Devin, through one
-  shared projection: user turns plus one folded reply per turn, tool
-  calls counted. Turns that only ran tools (e.g. aborted) are kept so
-  the count stays visible. `page=0` returns the newest page.
-- **Lighter list, no silent cut-off.** `/api/sessions` drops
-  `last_assistant` (about 60% of the payload; ~2.4 MB → ~1.1 MB here)
-  and search no longer covers replies. The 1,000-session cap that
-  silently hid the oldest sessions is now a 10,000 safety cap reported
-  via `X-Sessions-Truncated` and a note at the end of the list.
-- **Codex prompts and subagents.** `codex_vscode` prompts are unwrapped
-  from their IDE-context preamble, AGENTS.md and guardian-review
-  injections no longer pose as the opening prompt, and Codex subagent
-  sessions (guardian reviews, spawned threads) are flagged headless.
-- Session files are always read whole; the head+tail window was always
-  followed by a full re-read anyway.
+- A compact session list on the left and the active session's
+  conversation on the right replace the card stack. The conversation
+  opens at the newest messages. On narrow screens it slides over the
+  list.
+- Conversations open for every source, not just Devin.
+- Pinned sessions use a pushpin and are grouped visibly at the top.
+  Delete is a trash icon.
+- The oldest sessions are no longer silently cut off past 1,000; if the
+  list is ever truncated, it says so.
+- Codex titles no longer show injected IDE context or AGENTS.md text,
+  and Codex subagent sessions count as headless.
 
 ### Headless sessions
-- **Every source except Pi now flags headless sessions**, not just
-  Codex. The verdict is made per source adapter (`headless` on each
-  session; `origin` carries the tooltip detail); see the README for the
-  signal each tool leaves on disk. Pi's `-p` runs are indistinguishable
-  from TUI sessions and stay unflagged.
-- **Origin filter.** A toolbar select (`Interactive` / `All Origins` /
-  `Headless Only`) hides headless sessions by default and remembers the
-  choice in localStorage. An empty search that only failed because of
-  the filter offers a one-click "Show N headless matches"; jumping to a
-  hidden session from the command palette widens the filter.
-- **Grok headless one-shots are shown and flagged** instead of being
-  dropped by the scanner, so they follow the same filter and can be
-  bulk-deleted.
+- Every source except Pi now marks headless sessions (started by a
+  script or another agent), not just Codex. Pi's `-p` runs leave no
+  trace that tells them apart.
+- A toolbar filter hides headless sessions by default and remembers the
+  choice. Grok's headless sessions are shown and marked instead of
+  being skipped.
 
 ## 2026-09-21
 

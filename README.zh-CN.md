@@ -60,33 +60,24 @@ size 信号（chip 上标 **size only**）。
 
 ## 布局
 
-两栏。左栏把每个 session 列成一行精简信息（标题、来源、headless 标记、
-项目、轮次、时间），置顶的在前，其余按时间倒序。右栏显示当前 session：
-cwd、id、resume 和复制命令、usage，以及对话内容——用户的每轮提问，加上
-每轮合并后的一条回复，中间的 tool 调用只计数不展开。默认打开最新一页，
-**Load earlier** 往前翻。窗口宽度小于 900px 时，列表占满屏幕，详情栏从
-右侧滑出覆盖在列表上。
-
-列表包含全部 session，上限 10,000 条作为安全阈值；触及上限时，列表末尾
-会有提示。
+左栏列出 session，置顶的在前，其余按时间倒序。右栏显示当前 session 的
+resume 和复制命令、usage 以及对话内容。对话里显示你的提问和 agent 的
+回复，tool 调用只计数。打开时停在最新的消息，**Load earlier** 往前翻。
+窗口较窄时，列表占满窗口，对话从右侧滑出覆盖在列表上。
 
 ## 搜索
 
-一个搜索框，分两层。标题、第一条和最后一条提问、cwd、session id 边输入
-边过滤。停止输入后，同一个查询还会在所有对话的全文里搜索——范围是用户
-提问和回复，也就是详情栏显示的那些消息——只在对话内容里命中的 session
-也会加进列表，并显示 `N hits` 命中条数。结果仍按时间排序。
+输入时按标题、第一条和最后一条提问、cwd 和 session id 过滤，整串查询作为
+一个字符串匹配。停止输入片刻后，同一个查询还会在所有对话的正文里搜索。
+这一层每个词单独匹配，所有词都要出现在同一条消息里；`"双引号"` 可以把
+短语当成一个整体。只在对话里命中的 session 也会加进列表，并显示命中条数。
+结果仍按时间排序。中文、日文和代码片段都能搜到。
 
-- 多个词必须出现在同一条消息里（AND）；`"双引号"` 表示短语。
-- 按子串匹配（SQLite FTS5 + trigram 分词），中日文和代码片段都能搜。
-  少于 3 个字符的词改为逐行扫描。
-- 详情栏里会高亮命中词，并滚动到最新的一处；`n` / `N` 在命中之间跳转。
-  命中如果在还没加载的更早分页里，会显示条数，并可一键加载更早的消息。
+对话里的命中会高亮，`n` / `N` 在命中之间跳转。还没加载的消息里的命中会
+显示条数，点击即可加载。
 
-索引存放在 `~/.cache/session-index-viewer/index.db`（设置了
-`$XDG_CACHE_HOME` 时放在其下）。启动时在后台建立（约 1,000 个 session
-需要 15 秒左右，期间列表会有提示），之后每次搜索前增量更新。它是派生
-数据，删掉即可强制重建。
+搜索索引存放在 `~/.cache/session-index-viewer/`，首次启动时在后台建立。
+建好之前，列表会提示结果可能不全。删掉索引也没关系，会自动重建。
 
 ## 键盘
 
@@ -105,22 +96,20 @@ cwd、id、resume 和复制命令、usage，以及对话内容——用户的每
 
 ## Headless session
 
-没人能在里面接话的 session 算 **headless**：`-p` / exec 运行、ACP / MCP
-驱动、subagent，不论是脚本还是别的 agent 启动的。列表和详情栏显示琥珀色
-`headless` 标签；工具栏的 origin 筛选默认隐藏它们（`Interactive` /
-`All Origins` / `Headless Only`，按浏览器记住）。搜索因为这个筛选而
-无结果时，空状态会提示并一键显示被隐藏的命中。`Headless Only` 配合
-批量删除可以一次清理。
+没人能在里面接话的 session 算 **headless**，包括 `-p` 和 exec 运行、
+ACP 或 MCP 驱动的会话以及 subagent，不论是脚本还是别的 agent 启动的。
+它们带 `headless` 标记，默认隐藏，可以用工具栏的 origin 筛选显示出来。
+`Headless Only` 配合批量删除可以一次清理。
 
 | 来源 | 判定信号 |
 |------|----------|
 | Claude Code | 所有记录的 `entrypoint` 都是 `sdk-*`（`sdk-cli` 即 `claude -p`）；之后在 TUI 里接着聊就算交互 |
 | Codex | `session_meta.originator` 为 `codex_exec`、`acpx` 或 `codex_cli_rs`，或 `source` 是 subagent（guardian 审批、派生的子线程） |
-| Devin | 用户消息都不带 `chisel/client-message-id`。旧版 Devin 从不写这个字段，所以只对比最早带标记的 session 更新的 session 打标 |
+| Devin | 用户消息都不带 `chisel/client-message-id`。旧版 Devin 从不写这个字段，所以旧版产生的 session 不会被标记 |
 | Copilot CLI | `session-state/<id>/events.jsonl` 的 system prompt 含 "running in non-interactive mode" |
 | opencode | `opencode run`（`permission` 里 deny 了 `question`）或 subagent（有 `parent_id`） |
 | Grok | `prompt_context.json` 中 `is_non_interactive: true` |
-| Pi | 无法识别——`pi -p` 写出的 JSONL 与 TUI 相同 |
+| Pi | 无法识别，`pi -p` 写出的 JSONL 与 TUI 相同 |
 
 ## 删除 session
 
@@ -136,21 +125,17 @@ JSON 放入废纸篓，再删库里的行。`~/.Trash` 不存在时删除功能�
 - `server.py` — 薄入口（`python3 server.py` / launchd）。
 - `siv/` — 仅标准库的后端，监听 `127.0.0.1:7333`：
   - `GET /` 返回页面。
-  - `GET /api/sessions` 实时扫描 session，按 mtime/size 缓存。列表不含
-    最后一条回复（旧版页面用 `?fields=full` 取回）；列表被截断时响应头带
-    `X-Sessions-Truncated: 1`。
-  - `GET /api/session?source=&session_id=&page=` 返回某个 session 对话的
-    一页（`page=0` 为最新一页）。
-  - `GET /api/search?q=` 先增量同步索引，再返回每个 session 的全文命中
-    （命中消息数和位置）。
+  - `GET /api/sessions` 实时扫描 session，按 mtime/size 缓存。
+  - `GET /api/session` 返回某个 session 对话的一页。
+  - `GET /api/search` 返回每个 session 的全文命中。
   - `POST /api/resume` 校验后打开终端执行
     `cd <cwd> && <工具> resume <id>`。若 cwd 是另一台机器的 home 前缀，
     会先映射到本机。
   - Host 标签取自 cwd 中的用户名（`/Users/<name>/...` 或 `/home/<name>/...`）。
   - 解析逻辑在 `siv/sources/`（`claude` / `codex` / `devin` / `grok` / `pi` /
     `copilot` / `opencode`）。
-- `frontend/` — React 两栏 UI（session 列表、对话详情栏、搜索与筛选、置顶、
-  usage modal、深色 / 浅色主题切换）。
+- `frontend/` — React 两栏 UI（session 列表和对话详情栏，含搜索、筛选、
+  置顶、usage modal 和深浅色主题）。
 - `sessions-index.html` — 旧版单文件 UI（无 dist 时回退）。
 - `install.sh` — 写入 launchd plist，并可构建前端。日志：
   `~/Library/Logs/session-index-viewer.log`。

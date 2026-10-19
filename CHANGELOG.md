@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-19
+
+### Resume fallback reads your shell config
+- When Ghostty cannot be scripted (older than 1.3, or automation
+  denied), resumed sessions now start in a shell that reads `.zshrc`,
+  so aliases and wrapper functions around the CLIs apply there too.
+
 ## 2026-10-14
 
 ### Full-text search

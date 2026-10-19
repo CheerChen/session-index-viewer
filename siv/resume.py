@@ -65,9 +65,11 @@ def open_in_terminal(command):
         # Fallback for Ghostty < 1.3 (no AppleScript dictionary): `open -na`
         # launches a throwaway instance — -e implies
         # quit-after-last-window-closed. -e expects argv with no shell
-        # interpretation, so wrap in `zsh -l -c` to handle `&&`, PATH, and
-        # aliases from the user's shell config. --window-save-state=never
-        # prevents restoring the previous window layout.
+        # interpretation, so wrap in `zsh -l -i -c` to handle `&&` and PATH.
+        # -i matters: only an interactive zsh reads .zshrc, where aliases and
+        # wrapper functions around the CLIs live, so this path behaves like
+        # the AppleScript one. --window-save-state=never prevents restoring
+        # the previous window layout.
         subprocess.Popen(
             [
                 "open",
@@ -78,6 +80,7 @@ def open_in_terminal(command):
                 "-e",
                 "zsh",
                 "-l",
+                "-i",
                 "-c",
                 command,
             ]

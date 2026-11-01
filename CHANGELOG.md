@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-11-02
+
+### Windows
+- The viewer now runs on Windows. Devin sessions are read from
+  `%APPDATA%`, Windows paths get the right project name and host label,
+  and resume opens a new PowerShell window in the session's folder.
+- Sessions synced from a Windows machine to a Mac are labelled with that
+  machine's user and resume in the matching folder under your home, the
+  same as sessions from another Mac.
+
+### Headless conversations
+- Headless sessions now show every reply the agent wrote, not just the
+  last one. They are a single prompt and one long turn, so only the
+  final summary used to appear. Search matches those replies too.
+- Devin sessions that compacted their context show the turns from
+  before the compaction again, including the original prompt.
+
 ## 2026-10-19
 
 ### Resume fallback reads your shell config

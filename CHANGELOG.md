@@ -6,6 +6,10 @@
 - The viewer now runs on Windows. Devin sessions are read from
   `%APPDATA%`, Windows paths get the right project name and host label,
   and resume opens a new PowerShell window in the session's folder.
+- Delete works on Windows and sends sessions to the Recycle Bin, where
+  Restore puts them back. Database-backed sources (Devin, Copilot,
+  opencode) leave their JSON recovery dump there too. On a drive with no
+  Recycle Bin the delete is refused instead of erasing the session.
 - Sessions synced from a Windows machine to a Mac are labelled with that
   machine's user and resume in the matching folder under your home, the
   same as sessions from another Mac.

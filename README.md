@@ -26,8 +26,8 @@ on first visit.
 > whichever is installed, in that order.
 >
 > **Windows** runs in the foreground (`python server.py`). Resume opens a
-> new PowerShell window (pwsh 7 when installed). There is no autostart,
-> and delete is disabled because there is no `~/.Trash`.
+> new PowerShell window (pwsh 7 when installed). Delete goes to the
+> Recycle Bin. There is no autostart.
 
 ## Run
 
@@ -134,8 +134,10 @@ The trash button in the detail pane's header (or `x`) asks for
 confirmation, then removes the session **via `~/.Trash`** — file-backed
 sources (Claude, Codex, Pi, Grok) are moved wholesale; database-backed
 sources (Devin, Copilot, opencode) get a JSON dump of the session's rows
-written to Trash before the rows are removed. Deletion is disabled when
-`~/.Trash` doesn't exist. A **Turns** filter in the toolbar (`≤ 1/2/3`)
+written to Trash before the rows are removed. On Windows the Recycle Bin
+takes the place of `~/.Trash`, and a drive without one refuses the
+delete rather than erasing anything. Elsewhere, deletion is disabled
+when `~/.Trash` doesn't exist. A **Turns** filter in the toolbar (`≤ 1/2/3`)
 surfaces low-activity sessions — e.g. one-shot "reply with just: ok"
 noise — for quick pruning.
 

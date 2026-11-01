@@ -146,7 +146,7 @@ def collect(limit):
     return entries
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     """Conversation from the turns table (pre-formatted text per turn).
 
     The table keeps no tool-call or reasoning detail, so replies carry
@@ -176,7 +176,7 @@ def messages(session_id, page=1, page_size=50):
             yield {"role": "user", "content": user_message or "", "created_at": ts}
             yield {"role": "assistant", "content": assistant_response or "", "created_at": ts}
 
-    return paginate(fold_turns(events()), page, page_size)
+    return paginate(fold_turns(events(), expand), page, page_size)
 
 
 def delete_session(session_id):

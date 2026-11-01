@@ -1,24 +1,83 @@
-"""Deletion helpers: everything goes through ~/.Trash, never unlink.
+"""Deletion helpers: everything goes to the Trash, never unlink.
 
 File/dir sources are moved into Trash wholesale. SQLite sources can't be
 moved, so their rows are dumped to a JSON file in Trash before the rows
 are deleted — the dump is the recoverable artifact either way.
 
-If ~/.Trash doesn't exist (non-macOS host, exotic setup) deletion is
-unavailable entirely; callers should gate on trash_available().
+macOS: ~/.Trash. Windows: the Recycle Bin, through SHFileOperationW. If
+~/.Trash doesn't exist on a POSIX host, deletion is unavailable entirely;
+callers should gate on trash_available().
 """
 
 import json
 import os
 import shutil
 import sqlite3
+import tempfile
 import time
+
+from .config import IS_WINDOWS
 
 TRASH_DIR = os.path.expanduser("~/.Trash")
 
+if IS_WINDOWS:
+    import ctypes
+    from ctypes import wintypes
+
+    class _SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", wintypes.WORD),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
+
+    class _SHQUERYRBINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("i64Size", ctypes.c_int64),
+            ("i64NumItems", ctypes.c_int64),
+        ]
+
+    _FO_DELETE = 0x3
+    # Recycle, no dialogs. FOF_ALLOWUNDO alone silently destroys what can't
+    # be recycled; FOF_WANTNUKEWARNING asks first instead, and
+    # _recycle() refuses drives without a Recycle Bin before that.
+    _RECYCLE_FLAGS = (
+        0x0040  # FOF_ALLOWUNDO
+        | 0x0010  # FOF_NOCONFIRMATION
+        | 0x0004  # FOF_SILENT
+        | 0x0400  # FOF_NOERRORUI
+        | 0x4000  # FOF_WANTNUKEWARNING
+    )
+
 
 def trash_available():
-    return os.path.isdir(TRASH_DIR)
+    return IS_WINDOWS or os.path.isdir(TRASH_DIR)
+
+
+def _recycle(path):
+    """Send a file or directory to the Windows Recycle Bin."""
+    path = os.path.abspath(path)
+    shell32 = ctypes.windll.shell32
+    info = _SHQUERYRBINFO(cbSize=ctypes.sizeof(_SHQUERYRBINFO))
+    root = os.path.splitdrive(path)[0] + "\\"
+    if shell32.SHQueryRecycleBinW(root, ctypes.byref(info)) != 0:
+        raise OSError(f"no Recycle Bin on {root}")
+    op = _SHFILEOPSTRUCTW(
+        wFunc=_FO_DELETE,
+        pFrom=path + "\0",  # the list is double-NUL terminated
+        fFlags=_RECYCLE_FLAGS,
+    )
+    code = shell32.SHFileOperationW(ctypes.byref(op))
+    if code or op.fAnyOperationsAborted:
+        raise OSError(f"SHFileOperationW failed ({code:#x})")
+    if os.path.exists(path):
+        raise OSError("item is still in place after recycling")
 
 
 def _dest(name):
@@ -34,7 +93,14 @@ def _dest(name):
 
 
 def move_to_trash(path):
-    """Move a file or directory into ~/.Trash. Returns the destination."""
+    """Move a file or directory into the Trash.
+
+    Returns the destination; None on Windows, where the Recycle Bin keeps
+    the original path for Restore.
+    """
+    if IS_WINDOWS:
+        _recycle(path)
+        return None
     dest = _dest(os.path.basename(path.rstrip("/")))
     try:
         os.rename(path, dest)
@@ -44,7 +110,19 @@ def move_to_trash(path):
 
 
 def dump_to_trash(name, payload):
-    """Write a JSON recovery dump into ~/.Trash. Returns the file path."""
+    """Write a JSON recovery dump into the Trash.
+
+    Returns the file path; None on Windows, where the dump is written to a
+    temp folder and then recycled.
+    """
+    if IS_WINDOWS:
+        folder = tempfile.mkdtemp(prefix="siv-")
+        dest = os.path.join(folder, f"{int(time.time())}-{name}")
+        with open(dest, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, default=str)
+        _recycle(dest)
+        os.rmdir(folder)
+        return None
     dest = _dest(name)
     with open(dest, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, default=str)

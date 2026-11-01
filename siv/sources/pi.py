@@ -181,8 +181,10 @@ def _events(records):
             }
 
 
-def messages(session_id, page=1, page_size=50):
-    return file_messages(PI_GLOB, session_id, _session_id, _events, page, page_size)
+def messages(session_id, page=1, page_size=50, expand=False):
+    return file_messages(
+        PI_GLOB, session_id, _session_id, _events, page, page_size, expand
+    )
 
 
 def delete_session(session_id):

@@ -66,11 +66,17 @@ def _key(source, session_id):
     return f"{source}|{session_id}"
 
 
-def _all_messages(source, session_id):
+def _sig(session):
+    # Headless sessions are indexed expanded (as the detail pane shows
+    # them), so the flag is part of what makes an index entry current.
+    return session["timestamp"] + ("|expanded" if session.get("headless") else "")
+
+
+def _all_messages(source, session_id, expand=False):
     module = MODULES.get(source)
     if module is None:
         return []
-    page = module.messages(session_id, 1, 1_000_000)
+    page = module.messages(session_id, 1, 1_000_000, expand)
     return page["messages"] if page else []
 
 
@@ -89,7 +95,7 @@ def sync(sessions):
                 _key(s["source"], s["session_id"]): s for s in sessions
             }
             pending = [
-                k for k, s in wanted.items() if indexed.get(k) != s["timestamp"]
+                k for k, s in wanted.items() if indexed.get(k) != _sig(s)
             ]
             _state["building"] = len(pending) > INLINE_SYNC_MAX
             for key in indexed.keys() - wanted.keys():
@@ -98,8 +104,10 @@ def sync(sessions):
                     conn.execute("DELETE FROM indexed WHERE key = ?", (key,))
             for key in pending:
                 s = wanted[key]
-                sig = s["timestamp"]
-                messages = _all_messages(s["source"], s["session_id"])
+                sig = _sig(s)
+                messages = _all_messages(
+                    s["source"], s["session_id"], bool(s.get("headless"))
+                )
                 # One transaction per session: readers never see a
                 # half-replaced conversation.
                 with conn:
@@ -137,7 +145,7 @@ def catch_up(sessions):
     pending = sum(
         1
         for s in sessions
-        if indexed.get(_key(s["source"], s["session_id"])) != s["timestamp"]
+        if indexed.get(_key(s["source"], s["session_id"])) != _sig(s)
     )
     if pending <= INLINE_SYNC_MAX:
         sync(sessions)

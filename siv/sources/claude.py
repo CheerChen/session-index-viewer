@@ -205,9 +205,9 @@ def _events(records):
             }
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     return file_messages(
-        CLAUDE_GLOB, session_id, _session_id, _events, page, page_size
+        CLAUDE_GLOB, session_id, _session_id, _events, page, page_size, expand
     )
 
 

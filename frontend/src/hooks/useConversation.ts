@@ -28,7 +28,10 @@ function remember(key: string, value: Conversation) {
 }
 
 export function useConversation(session: Session | null) {
-  const key = session ? `${sessionKey(session)}@${session.timestamp}` : "";
+  const headless = session?.headless ?? false;
+  const key = session
+    ? `${sessionKey(session)}@${session.timestamp}${headless ? "+x" : ""}`
+    : "";
   // Depend on identity strings, not the object: every list refetch hands
   // out new Session objects for unchanged sessions.
   const source = session?.source ?? "";
@@ -50,7 +53,11 @@ export function useConversation(session: Session | null) {
     let cancelled = false;
     const timer = setTimeout(() => {
       // Page 0 asks the server for the last (newest) page.
-      fetchSessionMessages({ source, session_id: sessionId }, 0, PAGE_SIZE)
+      fetchSessionMessages(
+        { source, session_id: sessionId, headless },
+        0,
+        PAGE_SIZE,
+      )
         .then((res) => {
           if (cancelled) return;
           const data = {
@@ -74,7 +81,7 @@ export function useConversation(session: Session | null) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [key, source, sessionId]);
+  }, [key, source, sessionId, headless]);
 
   const current = state.key === key ? state : null;
 
@@ -84,7 +91,7 @@ export function useConversation(session: Session | null) {
     setLoadingEarlier(true);
     try {
       const res = await fetchSessionMessages(
-        { source, session_id: sessionId },
+        { source, session_id: sessionId, headless },
         data.firstPage - 1,
         PAGE_SIZE,
       );
@@ -100,7 +107,7 @@ export function useConversation(session: Session | null) {
     } finally {
       setLoadingEarlier(false);
     }
-  }, [current?.data, key, loadingEarlier, source, sessionId]);
+  }, [current?.data, key, loadingEarlier, source, sessionId, headless]);
 
   return {
     key,

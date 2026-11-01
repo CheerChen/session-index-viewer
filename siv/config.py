@@ -27,7 +27,20 @@ CODEX_GLOB = os.path.expanduser("~/.codex/sessions/*/*/*/rollout-*.jsonl")
 # the same mtime-ranked candidate list as Claude/Codex.
 PI_GLOB = os.path.expanduser("~/.pi/agent/sessions/*/*.jsonl")
 
-DEVIN_DB = os.path.expanduser("~/.local/share/devin/cli/sessions.db")
+IS_WINDOWS = os.name == "nt"
+
+# Devin CLI keeps its store under XDG data on macOS/Linux and under
+# %APPDATA% on Windows.
+DEVIN_DB = (
+    os.path.join(
+        os.environ.get("APPDATA") or os.path.expanduser("~/AppData/Roaming"),
+        "devin",
+        "cli",
+        "sessions.db",
+    )
+    if IS_WINDOWS
+    else os.path.expanduser("~/.local/share/devin/cli/sessions.db")
+)
 
 # GitHub Copilot CLI: one SQLite store with a clean turns table
 # (pre-formatted user/assistant text) and per-turn usage events.
@@ -54,10 +67,16 @@ INDEX_DB = os.path.join(
 # Sessions synced across machines (e.g. via syncthing) keep the cwd
 # they were recorded with. host_for() infers a label from the home-dir
 # prefix: cwds under /Users/<name>/ or /home/<name>/ are labelled with
-# that <name>, including this machine's own home.
+# that <name>, including this machine's own home. Windows cwds
+# (C:\Users\<name>\...) carry a drive letter and backslashes; group 1 is
+# the POSIX name, group 2 the Windows one.
 LOCAL_HOME = os.path.expanduser("~")
-HOME_DIR_RE = re.compile(r"^/(?:Users|home)/([^/]+)")
-LOCAL_USER = os.path.basename(LOCAL_HOME.rstrip("/")) or "unknown"
+HOME_DIR_RE = re.compile(
+    r"^(?:/(?:Users|home)/([^/]+)|[A-Za-z]:[\\/]Users[\\/]([^\\/]+))"
+)
+LOCAL_USER = (
+    os.path.basename(LOCAL_HOME.rstrip("/\\" if IS_WINDOWS else "/")) or "unknown"
+)
 CURRENT_CWD = os.getcwd() if os.path.isdir(os.getcwd()) else LOCAL_HOME
 
 # Safety cap, not a page size: the client filters and searches the whole

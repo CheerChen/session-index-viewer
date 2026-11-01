@@ -17,8 +17,11 @@ Terminal 新窗口里 resume。
 hero 右上角有**深色模式**切换按钮，选择会保存在本地，首次访问时跟随系统
 `prefers-color-scheme`。
 
-> **仅支持 macOS。** 用 launchd 自启，通过 AppleScript / `open -na` 调用
+> **为 macOS 打造。** 用 launchd 自启，通过 AppleScript / `open -na` 调用
 > Ghostty、iTerm 或 Terminal.app。按该顺序自动检测已安装的终端。
+>
+> **Windows** 需前台运行（`python server.py`）。恢复会话时新开一个
+> PowerShell 窗口（装了 pwsh 7 就用它）。删除会移入回收站。没有自启。
 
 ## 运行
 
@@ -116,7 +119,9 @@ ACP 或 MCP 驱动的会话以及 subagent，不论是脚本还是别的 agent �
 详情栏顶部的垃圾桶按钮（或按 `x`）确认后经 `~/.Trash` 移除——
 文件类 source（Claude / Codex / Pi / Grok）整体移入废纸篓；数据库类
 source（Devin / Copilot / opencode）先把该 session 的所有行导出为
-JSON 放入废纸篓，再删库里的行。`~/.Trash` 不存在时删除功能整体禁用。
+JSON 放入废纸篓，再删库里的行。Windows 上用回收站代替 `~/.Trash`，
+所在盘没有回收站时拒绝删除，而不是直接抹掉。其他系统上 `~/.Trash`
+不存在时删除功能整体禁用。
 工具栏的 **Turns** 筛选（`≤ 1/2/3`）可以把低轮次会话筛出来——比如
 "reply with just: ok" 之类的单次会话——方便快速清理。
 

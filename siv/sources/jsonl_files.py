@@ -117,16 +117,19 @@ def delete_file_session(pattern, session_id, extract_id):
     return {"ok": True}, 200
 
 
-def file_messages(pattern, session_id, extract_id, to_events, page, page_size):
+def file_messages(
+    pattern, session_id, extract_id, to_events, page, page_size, expand=False
+):
     """Paginated conversation for a JSONL-backed session, or None."""
     path = find_session_file(pattern, session_id, extract_id)
     if path is None:
         return None
     try:
         st = os.stat(path)
-        key = (path, st.st_mtime_ns, st.st_size)
-
-        all_messages = cached(key, lambda: fold_turns(to_events(read_records(path))))
+        key = (path, st.st_mtime_ns, st.st_size, expand)
+        all_messages = cached(
+            key, lambda: fold_turns(to_events(read_records(path)), expand)
+        )
     except OSError:
         return None
     return paginate(all_messages, page, page_size)

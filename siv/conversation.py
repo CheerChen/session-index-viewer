@@ -40,13 +40,17 @@ def _has_reply(message):
     return isinstance(content, str) and bool(content.strip())
 
 
-def fold_turns(events):
+def fold_turns(events, expand=False):
     """Return user turns and one combined assistant reply per turn.
 
     User events that are injected boilerplate (see usable_user_text) are
     dropped. An assistant side with neither text nor tool calls is dropped
     too; one that only ran tools (e.g. an aborted turn) is kept so the
     tool count stays visible.
+
+    With `expand`, every assistant text gets its own reply, carrying the
+    tool calls that follow it. Headless runs are one prompt and one long
+    turn, so folding them would leave only the final text.
     """
     messages = []
     assistant = None
@@ -78,6 +82,14 @@ def fold_turns(events):
             continue
         if role != "assistant":
             continue
+        if (
+            expand
+            and assistant is not None
+            and _has_reply(assistant)
+            and (content.strip() or event.get("thinking"))
+        ):
+            flush()
+            assistant = None
         if assistant is None:
             assistant = {
                 "node_id": event.get("node_id", len(messages)),

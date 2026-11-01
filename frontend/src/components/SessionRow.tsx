@@ -30,7 +30,9 @@ interface SessionRowProps {
 
 // Last path segment of the cwd: the project name at a glance.
 function project(cwd: string): string {
-  const parts = cwd.split("/").filter(Boolean);
+  // Windows cwds (drive letter) may use backslashes.
+  const sep = /^[A-Za-z]:[\\/]/.test(cwd) ? /[\\/]/ : "/";
+  const parts = cwd.split(sep).filter(Boolean);
   return parts[parts.length - 1] || cwd || "~";
 }
 

@@ -413,7 +413,7 @@ def _chat_history_events(records):
             yield {"role": "assistant", "content": blocks_text(record.get("content"))}
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     session_dir = _session_dir(session_id)
     if session_dir is None:
         return None
@@ -428,11 +428,11 @@ def messages(session_id, page=1, page_size=50):
     def build():
         records = read_records(path)
         if path == updates_path:
-            return fold_turns(_join_chunks(_update_events(records)))
-        return fold_turns(_chat_history_events(records))
+            return fold_turns(_join_chunks(_update_events(records)), expand)
+        return fold_turns(_chat_history_events(records), expand)
 
     try:
-        all_messages = cached((path, st.st_mtime_ns, st.st_size), build)
+        all_messages = cached((path, st.st_mtime_ns, st.st_size, expand), build)
     except OSError:
         return None
     return paginate(all_messages, page, page_size)

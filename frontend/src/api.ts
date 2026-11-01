@@ -15,7 +15,7 @@ export async function fetchSessions(): Promise<{
 }
 
 export async function fetchSessionMessages(
-  session: Pick<Session, "source" | "session_id">,
+  session: Pick<Session, "source" | "session_id" | "headless">,
   page: number,
   pageSize = 50,
 ): Promise<SessionMessages> {
@@ -25,6 +25,9 @@ export async function fetchSessionMessages(
     page: String(page),
     page_size: String(pageSize),
   });
+  // Headless runs are one long turn; expanded, every reply text shows
+  // instead of only the last one.
+  if (session.headless) qs.set("expand", "1");
   const res = await fetch(`/api/session?${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

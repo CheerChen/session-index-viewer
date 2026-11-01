@@ -220,15 +220,80 @@ def _flag_headless(entries, tagged_by_sid, created_by_sid):
         entry["headless"] = headless
 
 
-def _events(rows):
-    """message_nodes rows (active chain, oldest first) as conversation events."""
-    for node_id, raw in rows:
-        try:
-            m = json.loads(raw)
-        except ValueError:
-            continue
-        if not isinstance(m, dict):
-            continue
+# A compacted session forks a fresh branch off the shared system prompt,
+# opening with a summary message; the turns before it, the original prompt
+# included, stay on a sibling branch that main_chain_id no longer reaches.
+COMPACTION_PREFIX = "You are continuing work from a previous conversation thread"
+
+
+def _path_to(nodes, leaf):
+    """Node ids from the root down to `leaf`."""
+    path = []
+    while leaf in nodes and leaf not in path:
+        path.append(leaf)
+        leaf = nodes[leaf][0]
+    return path[::-1]
+
+
+def _latest_leaf(nodes, children, starts, before):
+    """Newest leaf below `starts` with a node id under `before`, or None."""
+    best = None
+    stack = list(starts)
+    while stack:
+        nid = stack.pop()
+        kids = children.get(nid)
+        if kids:
+            stack.extend(kids)
+        elif nid < before and (best is None or nid > best):
+            best = nid
+    return best
+
+
+def _full_chain(nodes, children, leaf):
+    """The active chain to `leaf`, with pre-compaction turns spliced back in."""
+    chain = _path_to(nodes, leaf)
+    marker = next(
+        (
+            i
+            for i, nid in enumerate(chain)
+            if nodes[nid][1].get("role") == "system"
+            and (nodes[nid][1].get("content") or "").startswith(COMPACTION_PREFIX)
+        ),
+        None,
+    )
+    if marker is None:
+        return chain
+    # The fork is the nearest ancestor of the summary with another branch.
+    fork = marker - 1
+    while fork >= 0 and len(children.get(chain[fork], ())) < 2:
+        fork -= 1
+    if fork < 0:
+        return chain
+    prior = _latest_leaf(
+        nodes,
+        children,
+        [c for c in children[chain[fork]] if c != chain[fork + 1]],
+        chain[marker],
+    )
+    if prior is None:
+        return chain
+    before = _full_chain(nodes, children, prior)
+    # The new branch re-carries the last exchange as copies (same role,
+    # timestamp and text); keep the originals only.
+    seen = {_identity(nodes[nid][1]) for nid in before} - {None}
+    return before + [
+        nid for nid in chain[fork + 1 :] if _identity(nodes[nid][1]) not in seen
+    ]
+
+
+def _identity(m):
+    created = (m.get("metadata") or {}).get("created_at") or ""
+    return (m.get("role"), created, m.get("content") or "") if created else None
+
+
+def _events(messages):
+    """(node_id, chat_message) pairs, oldest first, as conversation events."""
+    for node_id, m in messages:
         thinking = m.get("thinking")
         calls = m.get("tool_calls")
         yield {
@@ -243,13 +308,15 @@ def _events(rows):
         }
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     """Return user turns and final assistant replies from the active chain.
 
     System context and tool results are omitted. Assistant events within one
     user turn are combined, with their tool-call count attached to the final
-    reply. The caller must validate session_id against DEVIN_ID_RE first.
-    Returns None when the DB or session is missing.
+    reply, unless `expand` keeps each reply text (see fold_turns). Turns from
+    before a context compaction are included. The caller must validate
+    session_id against DEVIN_ID_RE first. Returns None when the DB or
+    session is missing.
     """
     if not os.path.isfile(DEVIN_DB):
         return None
@@ -262,27 +329,32 @@ def messages(session_id, page=1, page_size=50):
             if session is None:
                 return None
             rows = conn.execute(
-                "WITH RECURSIVE chain(node_id, parent_node_id, chat_message, depth) AS ("
-                "  SELECT node_id, parent_node_id, chat_message, 0 FROM message_nodes "
-                "  WHERE session_id = ? AND node_id = ? "
-                "  UNION ALL "
-                "  SELECT parent.node_id, parent.parent_node_id, "
-                "    parent.chat_message, child.depth + 1 "
-                "  FROM message_nodes AS parent JOIN chain AS child "
-                "    ON parent.session_id = ? "
-                "   AND parent.node_id = child.parent_node_id"
-                ") "
-                "SELECT node_id, chat_message FROM chain "
-                "WHERE json_extract(chat_message, '$.role') IN ('user','assistant') "
-                "ORDER BY depth DESC",
-                (session_id, session[0], session_id),
+                "SELECT node_id, parent_node_id, chat_message FROM message_nodes "
+                "WHERE session_id = ?",
+                (session_id,),
             ).fetchall()
         finally:
             conn.close()
     except sqlite3.Error:
         return None
 
-    return paginate(fold_turns(_events(rows)), page, page_size)
+    nodes = {}
+    children = {}
+    for node_id, parent, raw in rows:
+        try:
+            m = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(m, dict):
+            continue
+        nodes[node_id] = (parent, m)
+        children.setdefault(parent, []).append(node_id)
+    chain = [
+        (nid, nodes[nid][1])
+        for nid in _full_chain(nodes, children, session[0])
+        if nodes[nid][1].get("role") in ("user", "assistant")
+    ]
+    return paginate(fold_turns(_events(chain), expand), page, page_size)
 
 
 def _executable():

@@ -202,7 +202,7 @@ def collect(limit):
     return entries
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     """Conversation from message rows and their text / reasoning / tool parts.
 
     Synthetic text parts (editor-context reminders opencode injects) are
@@ -254,7 +254,7 @@ def messages(session_id, page=1, page_size=50):
         if current:
             yield current
 
-    return paginate(fold_turns(events()), page, page_size)
+    return paginate(fold_turns(events(), expand), page, page_size)
 
 
 def delete_session(session_id):

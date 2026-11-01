@@ -117,10 +117,13 @@ class Handler(BaseHTTPRequestHandler):
                 # page 0 = last page, which the detail pane opens on.
                 page = max(0, page)
                 page_size = max(1, min(page_size, 200))
+                # The client asks for headless sessions expanded; search
+                # indexes them the same way so hit positions line up.
+                expand = query.get("expand", [""])[0] == "1"
                 module = MODULES.get(source)
                 id_re = SOURCE_ID_RES.get(source, SESSION_ID_RE)
                 payload = (
-                    module.messages(session_id, page, page_size)
+                    module.messages(session_id, page, page_size, expand)
                     if module and id_re.fullmatch(session_id)
                     else None
                 )

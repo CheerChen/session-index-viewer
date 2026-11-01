@@ -242,9 +242,9 @@ def _events(records):
             yield {"role": "assistant", "tool_calls": 1}
 
 
-def messages(session_id, page=1, page_size=50):
+def messages(session_id, page=1, page_size=50, expand=False):
     return file_messages(
-        CODEX_GLOB, session_id, _session_id, _events, page, page_size
+        CODEX_GLOB, session_id, _session_id, _events, page, page_size, expand
     )
 
 

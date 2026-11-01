@@ -21,9 +21,13 @@ A **dark mode** toggle sits in the hero's top-right corner. The choice
 persists across reloads and defaults to the OS `prefers-color-scheme`
 on first visit.
 
-> **macOS only.** Uses launchd for autostart and AppleScript /
+> **Built for macOS.** Uses launchd for autostart and AppleScript /
 > `open -na` to launch Ghostty, iTerm, or Terminal.app. Auto-detects
 > whichever is installed, in that order.
+>
+> **Windows** runs in the foreground (`python server.py`). Resume opens a
+> new PowerShell window (pwsh 7 when installed). There is no autostart,
+> and delete is disabled because there is no `~/.Trash`.
 
 ## Run
 

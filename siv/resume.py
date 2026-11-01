@@ -1,10 +1,11 @@
-"""Build resume shell commands and open them in a macOS terminal."""
+"""Build resume shell commands and open them in a terminal (macOS / Windows)."""
 
 import os
 import shlex
+import shutil
 import subprocess
 
-from .config import TERMINAL_APP
+from .config import IS_WINDOWS, TERMINAL_APP
 from .host import resolve_resume_cwd
 
 
@@ -24,7 +25,14 @@ def resume_command(source, session_id, cwd):
     else:
         base = f"codex resume {session_id}"
     resolved_cwd = resolve_resume_cwd(cwd)
-    return f"cd {shlex.quote(resolved_cwd)} && {base}" if resolved_cwd else base
+    if not resolved_cwd:
+        return base
+    if IS_WINDOWS:
+        # PowerShell syntax: Windows PowerShell 5.1 has no `&&`, and a
+        # single-quoted literal only needs its own quotes doubled.
+        quoted = "'" + resolved_cwd.replace("'", "''") + "'"
+        return f"Set-Location -LiteralPath {quoted}; {base}"
+    return f"cd {shlex.quote(resolved_cwd)} && {base}"
 
 
 def detect_terminal():
@@ -36,7 +44,22 @@ def detect_terminal():
     return "Terminal"
 
 
+def _open_windows_console(command):
+    # A new console window running PowerShell; on Windows 11 it opens in
+    # whatever the default terminal host is (usually Windows Terminal).
+    # Prefer pwsh 7: Windows PowerShell's default Restricted policy blocks
+    # the npm .ps1 shims that most of these CLIs install.
+    shell = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+    subprocess.Popen(
+        [shell, "-NoLogo", "-NoExit", "-Command", command],
+        creationflags=subprocess.CREATE_NEW_CONSOLE,
+    )
+
+
 def open_in_terminal(command):
+    if IS_WINDOWS:
+        _open_windows_console(command)
+        return
     app = detect_terminal()
     escaped = command.replace("\\", "\\\\").replace('"', '\\"')
     if app == "Ghostty":

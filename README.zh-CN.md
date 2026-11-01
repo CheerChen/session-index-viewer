@@ -17,8 +17,12 @@ Terminal 新窗口里 resume。
 hero 右上角有**深色模式**切换按钮，选择会保存在本地，首次访问时跟随系统
 `prefers-color-scheme`。
 
-> **仅支持 macOS。** 用 launchd 自启，通过 AppleScript / `open -na` 调用
+> **为 macOS 打造。** 用 launchd 自启，通过 AppleScript / `open -na` 调用
 > Ghostty、iTerm 或 Terminal.app。按该顺序自动检测已安装的终端。
+>
+> **Windows** 需前台运行（`python server.py`）。恢复会话时新开一个
+> PowerShell 窗口（装了 pwsh 7 就用它）。没有自启；因为没有 `~/.Trash`，
+> 删除功能不可用。
 
 ## 运行
 

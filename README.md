@@ -85,7 +85,12 @@ also runs against the text of every conversation. There each word is
 matched separately, and all of them must appear in the same message;
 `"double quotes"` keep a phrase together. Sessions that match only in
 their conversation join the list with a hit count. Results stay in time
-order. Chinese, Japanese and code fragments all match.
+order. Searches ignore case and match whole words by default. Enable
+**Substring** beside the search box to also find `ecr` inside `secret`.
+Letters, digits and underscores stay in one word; spaces, punctuation,
+hyphens and CJK characters separate English words. Chinese and Japanese
+text can still be searched in fragments. The same mode applies to metadata,
+conversation search and highlighting.
 
 In the conversation, matches are highlighted and `n` / `N` step through
 them. Matches in messages not loaded yet are counted, with a link to load

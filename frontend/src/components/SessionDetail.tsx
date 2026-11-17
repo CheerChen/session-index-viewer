@@ -56,6 +56,7 @@ interface SessionDetailProps {
   session: Session | null;
   // Full-text query terms and this session's hits (null: none / no query).
   searchTerms: string[];
+  substring: boolean;
   searchHit: SearchHit | null;
   pinned: boolean;
   onPin: (session: Session) => void;
@@ -68,6 +69,7 @@ interface SessionDetailProps {
 function Detail({
   session,
   searchTerms,
+  substring,
   searchHit,
   pinned,
   onPin,
@@ -87,6 +89,7 @@ function Detail({
     searchHit ? searchTerms : [],
     `${conv.key}#${count}`,
     conv.key,
+    substring,
   );
 
   useLayoutEffect(() => {

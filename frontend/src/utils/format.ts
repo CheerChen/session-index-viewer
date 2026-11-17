@@ -1,6 +1,8 @@
 // Formatting helpers shared across components. Kept pure (no DOM) so
 // they can be unit-tested and reused in the command palette.
 
+import { searchPattern } from "./search.ts";
+
 const RELATIVE_FORMATTER = new Intl.RelativeTimeFormat("en", {
   numeric: "auto",
 });
@@ -81,14 +83,18 @@ export function clipText(text: string, max = 600): string {
   return `${text.slice(0, max)}… (+${text.length - max} chars)`;
 }
 
-// Wrap occurrences of `query` in <mark> for search highlighting.
-// The input text is escaped first so the mark tags are the only HTML.
-export function highlight(text: string, query: string): string {
-  const safe = escapeHtml(text || " ");
-  if (!query) return safe;
-  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(`(${escapedQuery})`, "ig");
-  return safe.replace(regex, "<mark>$1</mark>");
+// Match original text, then escape every slice so only our mark tags are HTML.
+export function highlight(text: string, query: string, substring = false): string {
+  const value = text || " ";
+  if (!query) return escapeHtml(value);
+  let html = "";
+  let offset = 0;
+  for (const match of value.matchAll(searchPattern(query, substring))) {
+    html += escapeHtml(value.slice(offset, match.index));
+    html += `<mark>${escapeHtml(match[0])}</mark>`;
+    offset = match.index + match[0].length;
+  }
+  return html + escapeHtml(value.slice(offset));
 }
 
 export function sourceAccent(source: string): string {

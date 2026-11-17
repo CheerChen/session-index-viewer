@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { useSessions } from "./hooks/useSessions";
 import { useSearch } from "./hooks/useSearch";
+import { matchesText } from "./utils/search";
 import type { SearchHit } from "./api";
 import { usePinned } from "./hooks/usePinned";
 import { useTheme } from "./hooks/useTheme";
@@ -24,6 +25,7 @@ import { BatchDeleteModal } from "./components/BatchDeleteModal";
 
 interface FilterState {
   query: string;
+  substring: boolean;
   source: SourceFilter;
   turns: TurnsFilter;
   origin: OriginFilter;
@@ -31,6 +33,7 @@ interface FilterState {
 
 const INITIAL_FILTER: FilterState = {
   query: "",
+  substring: false,
   source: "all",
   turns: "any",
   origin: "interactive",
@@ -75,6 +78,7 @@ function matchesRest(
   source: SourceFilter,
   turns: TurnsFilter,
   q: string,
+  substring: boolean,
   hits: Record<string, SearchHit> | null,
 ): boolean {
   if (source !== "all" && item.source !== source) return false;
@@ -92,7 +96,7 @@ function matchesRest(
   ]
     .join("\n")
     .toLowerCase();
-  return haystack.includes(q) || !!hits?.[sessionKey(item)];
+  return matchesText(haystack, q, substring) || !!hits?.[sessionKey(item)];
 }
 
 export default function App() {
@@ -116,8 +120,8 @@ export default function App() {
   const [batchDelete, setBatchDelete] = useState<Session[] | null>(null);
   // Global usage modal — single instance, no per-card state.
   const [usageSession, setUsageSession] = useState<Session | null>(null);
-  const { query, source, turns, origin } = filter;
-  const search = useSearch(query);
+  const { query, substring, source, turns, origin } = filter;
+  const search = useSearch(query, substring);
   const hits = search?.hits ?? null;
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -128,7 +132,7 @@ export default function App() {
       .filter(
         (item) =>
           matchesOrigin(item, origin) &&
-          matchesRest(item, source, turns, q, hits),
+          matchesRest(item, source, turns, q, substring, hits),
       )
       .sort((a, b) => {
         // Pinned sessions float above the rest; within each group,
@@ -140,7 +144,7 @@ export default function App() {
         const right = new Date(b.timestamp).getTime() || 0;
         return right - left;
       });
-  }, [sessions, query, source, turns, origin, hits, pinnedIds]);
+  }, [sessions, query, substring, source, turns, origin, hits, pinnedIds]);
 
   // Matches the origin filter alone is hiding — only computed when
   // nothing is shown, to offer a one-click switch.
@@ -148,9 +152,9 @@ export default function App() {
     if (filtered.length > 0 || origin === "all") return 0;
     const q = query.trim().toLowerCase();
     return sessions.filter((item) =>
-      matchesRest(item, source, turns, q, hits),
+      matchesRest(item, source, turns, q, substring, hits),
     ).length;
-  }, [filtered.length, sessions, query, source, turns, origin, hits]);
+  }, [filtered.length, sessions, query, substring, source, turns, origin, hits]);
 
   const setOrigin = useCallback((value: OriginFilter) => {
     saveOrigin(value);
@@ -410,6 +414,8 @@ export default function App() {
         </button>
         <Toolbar
           query={query}
+          substring={substring}
+          onSubstringChange={(v) => setFilter((f) => ({ ...f, substring: v }))}
           onQueryChange={(v) => setFilter((f) => ({ ...f, query: v }))}
           source={source}
           onSourceChange={(v) =>
@@ -498,6 +504,7 @@ export default function App() {
                       showHost={multiHost}
                       hitCount={hits?.[sessionKey(item)]?.count ?? 0}
                       queryText={queryText}
+                      substring={substring}
                       onActivate={handleActivate}
                       onToggleSelect={handleToggleSelect}
                     />
@@ -524,6 +531,7 @@ export default function App() {
           <SessionDetail
             session={activeSession}
             searchTerms={search?.terms ?? []}
+            substring={substring}
             searchHit={
               activeSession ? (hits?.[sessionKey(activeSession)] ?? null) : null
             }

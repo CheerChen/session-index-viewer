@@ -13,6 +13,7 @@ background, and searches during it return what is indexed so far.
 """
 
 import os
+import re
 import sqlite3
 import threading
 
@@ -180,11 +181,12 @@ def _like_escape(term):
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def search(q):
+def search(q, substring=False):
     """{"hits": {key: {"count", "positions"}}, "terms", "indexing"}.
 
     Every term must occur in the same message (AND per message). Terms of
     3+ characters go through FTS5; shorter ones are LIKE filters.
+    By default ASCII letters, digits and underscores cannot border a hit.
     """
     terms = parse_query(q)
     result = {"hits": {}, "terms": terms, "indexing": _state["building"]}
@@ -204,6 +206,16 @@ def search(q):
         params.append(f"%{_like_escape(t)}%")
 
     conn = _connect()
+    if not substring:
+        patterns = [
+            re.compile(r"(?<![A-Za-z0-9_])" + re.escape(t) + r"(?![A-Za-z0-9_])", re.I)
+            for t in terms
+        ]
+        conn.create_function(
+            "whole_words", 1,
+            lambda body: all(pattern.search(body) is not None for pattern in patterns),
+        )
+        where.append("whole_words(msg.body)")
     try:
         rows = conn.execute(
             "SELECT key, pos FROM msg WHERE " + " AND ".join(where) +

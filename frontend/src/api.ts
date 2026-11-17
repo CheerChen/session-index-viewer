@@ -109,9 +109,10 @@ export interface SearchResult {
 
 export async function fetchSearch(
   q: string,
+  substring: boolean,
   signal?: AbortSignal,
 ): Promise<SearchResult> {
-  const res = await fetch(`/api/search?${new URLSearchParams({ q })}`, {
+  const res = await fetch(`/api/search?${new URLSearchParams({ q, substring: substring ? "1" : "0" })}`, {
     cache: "no-store",
     signal,
   });

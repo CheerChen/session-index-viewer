@@ -2,6 +2,8 @@ import type { OriginFilter, SourceFilter, TurnsFilter } from "../types";
 
 interface ToolbarProps {
   query: string;
+  substring: boolean;
+  onSubstringChange: (value: boolean) => void;
   onQueryChange: (value: string) => void;
   source: SourceFilter;
   onSourceChange: (value: SourceFilter) => void;
@@ -14,6 +16,8 @@ interface ToolbarProps {
 
 export function Toolbar({
   query,
+  substring,
+  onSubstringChange,
   onQueryChange,
   source,
   onSourceChange,
@@ -25,7 +29,7 @@ export function Toolbar({
 }: ToolbarProps) {
   return (
     <div className="toolbar">
-      <div className="field">
+      <div className="field search-field">
         <svg
           className="field-icon"
           viewBox="0 0 16 16"
@@ -48,6 +52,18 @@ export function Toolbar({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
         />
+        <button
+          type="button"
+          className="substring-toggle"
+          aria-pressed={substring}
+          title="Match inside words (ecr also finds secret)"
+          onClick={() => onSubstringChange(!substring)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+          }}
+        >
+          Substring
+        </button>
       </div>
 
       <div className="field">

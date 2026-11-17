@@ -97,11 +97,13 @@ class Handler(BaseHTTPRequestHandler):
                     headers={"X-Sessions-Truncated": "1"} if truncated else None,
                 )
             elif path == "/api/search":
-                q = parse_qs(parsed.query).get("q", [""])[0][:200]
+                query = parse_qs(parsed.query)
+                q = query.get("q", [""])[0][:200]
+                substring = query.get("substring", ["0"])[0] == "1"
                 # Pick up sessions that changed since the last sync; a
                 # big backlog is indexed in the background instead.
                 search.catch_up(scan_sessions(DEFAULT_LIMIT)[0])
-                self._send_json(search.search(q))
+                self._send_json(search.search(q, substring=substring))
             elif path == "/api/session":
                 query = parse_qs(parsed.query)
                 source = query.get("source", [""])[0]

@@ -1,0 +1,107 @@
+[
+  {
+    "term": "ecr",
+    "text": "AWS ECR",
+    "whole": true
+  },
+  {
+    "term": "ecr",
+    "text": "(ecr)",
+    "whole": true
+  },
+  {
+    "term": "ecr",
+    "text": "ecr.amazonaws.com",
+    "whole": true
+  },
+  {
+    "term": "ecr",
+    "text": "my-ecr-repo",
+    "whole": true
+  },
+  {
+    "term": "ecr",
+    "text": "配置ecr仓库",
+    "whole": true
+  },
+  {
+    "term": "ecr",
+    "text": "secret",
+    "whole": false
+  },
+  {
+    "term": "ecr",
+    "text": "ecr123",
+    "whole": false
+  },
+  {
+    "term": "ecr",
+    "text": "123ecr",
+    "whole": false
+  },
+  {
+    "term": "ecr",
+    "text": "my_ecr_repo",
+    "whole": false
+  },
+  {
+    "term": "ecr",
+    "text": "ecrx ECR",
+    "whole": true
+  },
+  {
+    "term": "ec",
+    "text": "(EC)",
+    "whole": true
+  },
+  {
+    "term": "ec",
+    "text": "secret",
+    "whole": false
+  },
+  {
+    "term": "a",
+    "text": "a",
+    "whole": true
+  },
+  {
+    "term": "a",
+    "text": "cat",
+    "whole": false
+  },
+  {
+    "term": "a_b",
+    "text": "(A_B)",
+    "whole": true
+  },
+  {
+    "term": "a_b",
+    "text": "xa_by",
+    "whole": false
+  },
+  {
+    "term": "a.b",
+    "text": "a.b",
+    "whole": true
+  },
+  {
+    "term": "a.b",
+    "text": "xa.by",
+    "whole": false
+  },
+  {
+    "term": "100%",
+    "text": "100%",
+    "whole": true
+  },
+  {
+    "term": "c++",
+    "text": "use C++ here",
+    "whole": true
+  },
+  {
+    "term": "仓库",
+    "text": "配置仓库地址",
+    "whole": true
+  }
+]

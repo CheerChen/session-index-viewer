@@ -24,6 +24,7 @@ interface SessionRowProps {
   // Messages in this session matching the full-text query (0 = none).
   hitCount: number;
   queryText: string;
+  substring: boolean;
   onActivate: (index: number) => void;
   onToggleSelect: (index: number) => void;
 }
@@ -46,6 +47,7 @@ function SessionRowImpl({
   showHost,
   hitCount,
   queryText,
+  substring,
   onActivate,
   onToggleSelect,
 }: SessionRowProps) {
@@ -79,7 +81,7 @@ function SessionRowImpl({
             <PinIcon filled size={12} />
           </span>
         )}
-        <span dangerouslySetInnerHTML={{ __html: highlight(title, queryText) }} />
+        <span dangerouslySetInnerHTML={{ __html: highlight(title, queryText, substring) }} />
       </div>
       <div className="row-meta">
         <span className="row-source">{session.source}</span>

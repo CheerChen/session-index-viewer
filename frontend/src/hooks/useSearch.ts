@@ -5,9 +5,9 @@ import { fetchSearch, type SearchResult } from "../api";
 // filter in App keeps reacting on every keystroke meanwhile.
 const DEBOUNCE_MS = 250;
 
-export function useSearch(query: string): SearchResult | null {
+export function useSearch(query: string, substring: boolean): SearchResult | null {
   const q = query.trim();
-  const [state, setState] = useState<{ q: string; result: SearchResult } | null>(
+  const [state, setState] = useState<{ q: string; substring: boolean; result: SearchResult } | null>(
     null,
   );
 
@@ -15,8 +15,8 @@ export function useSearch(query: string): SearchResult | null {
     if (!q) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
-      fetchSearch(q, ctrl.signal)
-        .then((result) => setState({ q, result }))
+      fetchSearch(q, substring, ctrl.signal)
+        .then((result) => setState({ q, substring, result }))
         .catch((err) => {
           if (err?.name !== "AbortError") console.error(err);
         });
@@ -25,8 +25,8 @@ export function useSearch(query: string): SearchResult | null {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, substring]);
 
   // A result for an older query would mark the wrong sessions.
-  return q && state?.q === q ? state.result : null;
+  return q && state?.q === q && state.substring === substring ? state.result : null;
 }

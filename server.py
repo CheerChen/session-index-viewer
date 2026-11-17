@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local session index server for Claude Code / Codex / Devin / Grok sessions.
+"""Local session index server for Claude Code, Codex, Devin, Grok, Pi, Copilot CLI, and opencode.
 
 Serves the viewer HTML at / and a live session index at /api/sessions.
 Sessions are parsed on demand with an in-memory cache keyed by

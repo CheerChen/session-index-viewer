@@ -305,7 +305,9 @@ function Detail({
               <Fragment key={message.node_id}>
                 {message.role === "assistant" && !!message.tool_call_count && (
                   <div className="conv-tool-omitted">
-                    省略了 {message.tool_call_count} 条 Tool 调用
+                    {message.tool_call_count}{" "}
+                    {message.tool_call_count === 1 ? "tool call" : "tool calls"}{" "}
+                    omitted
                   </div>
                 )}
                 <div className={`conv-msg conv-msg--${message.role}`}>
